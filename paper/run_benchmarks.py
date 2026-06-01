@@ -263,6 +263,156 @@ def bench_constraint_survival():
 
 
 # ════════════════════════════════════════════════════════════════
+# Benchmark 2b: End-to-End Constraint Violation Rate
+# ════════════════════════════════════════════════════════════════
+
+def bench_constraint_violation():
+    """
+    End-to-end test: after memory pressure, does the agent still retrieve constraints?
+    Simulates: agent stores constraints → memory fills → pressure evicts → agent queries.
+    Metric: "violation rate" = fraction of constraint queries that fail to retrieve the constraint.
+    """
+    print("\n" + "="*60)
+    print("BENCHMARK 2b: End-to-End Constraint Violation Rate")
+    print("="*60)
+
+    import random
+    rng = random.Random(42)
+
+    # Define 20 realistic constraints with natural-language queries
+    constraints = [
+        ("Never modify git commit author case", "git commit author formatting rule"),
+        ("Database migrations must be backward compatible", "database migration compatibility requirement"),
+        ("API responses must include pagination metadata", "API pagination response format"),
+        ("User passwords must be hashed with bcrypt", "password storage security requirement"),
+        ("All external API calls must have timeout of 30s", "external API timeout policy"),
+        ("Frontend must not make direct database queries", "frontend database access restriction"),
+        ("Log messages must not contain PII", "logging privacy constraint"),
+        ("Deployment requires two approvals", "deployment approval process"),
+        ("Cache TTL must not exceed 1 hour for user data", "user data cache duration limit"),
+        ("Error responses must use standard error schema", "error response format standard"),
+        ("Background jobs must be idempotent", "background job design constraint"),
+        ("File uploads limited to 50MB", "file upload size restriction"),
+        ("All dates stored as UTC ISO-8601", "date storage format requirement"),
+        ("WebSocket connections must authenticate within 5s", "websocket auth timeout"),
+        ("Batch operations limited to 1000 items", "batch size limit"),
+        ("All database queries must use parameterized statements", "SQL injection prevention rule"),
+        ("Session tokens expire after 24 hours", "session expiry policy"),
+        ("Microservices must implement health check endpoint", "service health check requirement"),
+        ("Feature flags must have owner and expiry date", "feature flag governance"),
+        ("All async operations must have cancellation support", "async cancellation requirement"),
+    ]
+
+    results_with_pin = []
+    results_without_pin = []
+
+    for trial in range(5):  # 5 seeds
+        seed = trial * 7 + 13
+        rng = random.Random(seed)
+
+        # === WITH PINS ===
+        conn, path = create_test_db()
+        for i, (constraint_text, _) in enumerate(constraints):
+            insert_chunk(conn, f"cst_{i:03d}", constraint_text,
+                         f"Design constraint: {constraint_text}. This is non-negotiable.",
+                         chunk_type="design_constraint", importance=0.8,
+                         access_count=1, days_ago=30)
+            pin_chunk(conn, f"cst_{i:03d}", project="bench", pin_type="hard")
+
+        # Add 200 filler items (simulating 10 sessions of work)
+        for i in range(200):
+            insert_chunk(conn, f"work_{i:04d}",
+                         f"Work item {i}: implemented feature {rng.choice(['auth','cache','api','db','ui'])} module",
+                         f"Details about work item {i}.",
+                         importance=0.6, access_count=rng.randint(0, 5), days_ago=rng.randint(1, 20))
+
+        # Eviction: keep only 50
+        cursor = conn.cursor()
+        cursor.execute("""SELECT id FROM memory_chunks WHERE project='bench'
+                         ORDER BY last_accessed ASC, importance ASC""")
+        all_ids = [r[0] for r in cursor.fetchall()]
+        evict_count = len(all_ids) - 50
+        evicted = 0
+        for cid in all_ids:
+            if evicted >= evict_count:
+                break
+            if is_pinned(conn, cid, project="bench"):
+                continue
+            cursor.execute("DELETE FROM memory_chunks WHERE id = ?", (cid,))
+            evicted += 1
+        conn.commit()
+
+        # Now query for each constraint (simulating agent checking rules)
+        violations = 0
+        for i, (_, query) in enumerate(constraints):
+            results = fts_search(conn, query, top_k=5, project="bench")
+            found = any(f"cst_{i:03d}" == r.get("id", "") for r in results)
+            if not found:
+                violations += 1
+
+        results_with_pin.append(violations / len(constraints))
+        conn.close()
+        os.unlink(path)
+
+        # === WITHOUT PINS ===
+        conn, path = create_test_db()
+        for i, (constraint_text, _) in enumerate(constraints):
+            insert_chunk(conn, f"cst_{i:03d}", constraint_text,
+                         f"Design constraint: {constraint_text}. This is non-negotiable.",
+                         chunk_type="design_constraint", importance=0.8,
+                         access_count=1, days_ago=30)
+            # NO PIN
+
+        for i in range(200):
+            insert_chunk(conn, f"work_{i:04d}",
+                         f"Work item {i}: implemented feature {rng.choice(['auth','cache','api','db','ui'])} module",
+                         f"Details about work item {i}.",
+                         importance=0.6, access_count=rng.randint(0, 5), days_ago=rng.randint(1, 20))
+
+        cursor = conn.cursor()
+        cursor.execute("""SELECT id FROM memory_chunks WHERE project='bench'
+                         ORDER BY last_accessed ASC, importance ASC""")
+        all_ids = [r[0] for r in cursor.fetchall()]
+        evict_count = len(all_ids) - 50
+        evicted = 0
+        for cid in all_ids:
+            if evicted >= evict_count:
+                break
+            cursor.execute("DELETE FROM memory_chunks WHERE id = ?", (cid,))
+            evicted += 1
+        conn.commit()
+
+        violations_no_pin = 0
+        for i, (_, query) in enumerate(constraints):
+            results = fts_search(conn, query, top_k=5, project="bench")
+            found = any(f"cst_{i:03d}" == r.get("id", "") for r in results)
+            if not found:
+                violations_no_pin += 1
+
+        results_without_pin.append(violations_no_pin / len(constraints))
+        conn.close()
+        os.unlink(path)
+
+    mean_with = statistics.mean(results_with_pin)
+    mean_without = statistics.mean(results_without_pin)
+    std_with = statistics.stdev(results_with_pin)
+    std_without = statistics.stdev(results_without_pin)
+
+    print(f"  With pins:    violation rate = {mean_with:.3f} ± {std_with:.3f}")
+    print(f"  Without pins: violation rate = {mean_without:.3f} ± {std_without:.3f}")
+    print(f"  Reduction:    {(mean_without - mean_with) / max(0.001, mean_without) * 100:.1f}%")
+
+    return {
+        "with_pin_violation_rate": mean_with,
+        "with_pin_std": std_with,
+        "without_pin_violation_rate": mean_without,
+        "without_pin_std": std_without,
+        "n_constraints": len(constraints),
+        "n_seeds": 5,
+    }
+
+
+# ════════════════════════════════════════════════════════════════
 # Benchmark 3: Multi-Agent Coherence
 # ════════════════════════════════════════════════════════════════
 
@@ -537,16 +687,18 @@ def bench_retention_expanded(n_seeds=5):
         rng = random.Random(seed * 42 + 7)
         conn, path = create_test_db()
 
-        # Insert 200 items
+        # Insert 200 items with per-seed variation in importance and access patterns
+        shuffled_subjects = list(subjects) * (200 // len(subjects) + 1)
+        rng.shuffle(shuffled_subjects)
         for i in range(200):
             topic = topics[i % len(topics)]
-            subject = subjects[i % len(subjects)]
+            subject = shuffled_subjects[i]
             summary = topic.format(subject)
             content = f"Session {i//10}: {summary}. Implementation details for {subject} with constraints and decisions."
             insert_chunk(conn, f"chunk_{i:04d}", summary, content,
-                         importance=0.5 + (i % 5) * 0.1,
-                         access_count=max(0, 5 - (i//10) // 4),
-                         days_ago=20 - i//10)
+                         importance=0.4 + rng.random() * 0.5,
+                         access_count=rng.randint(0, 8),
+                         days_ago=rng.randint(1, 25))
 
         # Evaluate 100 queries
         recall = 0
@@ -633,31 +785,49 @@ def bench_ablation_longmemeval():
     return results
 
 
+def _ingest_question_sessions(conn, question, project):
+    """Ingest one question's haystack sessions (matches production: per-question isolation)."""
+    now = datetime.now(timezone.utc).isoformat()
+    sids = question.get("haystack_session_ids", [])
+    sessions = question.get("haystack_sessions", [])
+    dates = question.get("haystack_dates", [""] * len(sids))
+
+    for i, sid in enumerate(sids):
+        if i >= len(sessions):
+            break
+        messages = sessions[i]
+        turns = []
+        for msg in messages:
+            if isinstance(msg, dict):
+                turns.append(f"{msg.get('role','')}: {msg.get('content','')}")
+        full_text = "\n".join(turns)
+
+        user_msgs = [m["content"] for m in messages if isinstance(m, dict) and m.get("role") == "user"]
+        summary = user_msgs[0][:200] if user_msgs else full_text[:200]
+
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO memory_chunks
+            (id, project, chunk_type, summary, content, importance,
+             access_count, last_accessed, created_at, updated_at,
+             source_session, retrievability, info_class, chunk_state)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (sid, project, "conversation", summary, full_text[:24000], 0.7,
+              0, now, dates[i] if i < len(dates) else now, now,
+              "lme_bench", 0.5, "world", "ACTIVE"))
+        rowid = cursor.lastrowid
+        if rowid:
+            cursor.execute("""
+                INSERT INTO memory_chunks_fts (rowid_ref, summary, content)
+                VALUES (?, ?, ?)
+            """, (str(rowid), summary, full_text[:24000]))
+    conn.commit()
+
+
 def _run_lme_retrieval(lme_data, access_tracking=True):
-    """Run LongMemEval retrieval-only: ingest sessions, query per question."""
-    conn, path = create_test_db()
+    """Run LongMemEval retrieval-only with per-question isolation (matches production)."""
     questions = lme_data if isinstance(lme_data, list) else lme_data.get("questions", lme_data.get("data", []))
 
-    # Ingest all unique sessions across all questions
-    # LME format: haystack_sessions[i] is a list of messages, haystack_session_ids[i] is its ID
-    all_sessions = {}
-    for q in questions:
-        sids = q.get("haystack_session_ids", [])
-        sessions = q.get("haystack_sessions", [])
-        for i, sid in enumerate(sids):
-            if sid not in all_sessions and i < len(sessions):
-                all_sessions[sid] = sessions[i]  # list of {role, content} messages
-
-    for sid, messages in all_sessions.items():
-        if isinstance(messages, list):
-            content = " ".join(m.get("content", "")[:200] for m in messages[:20] if isinstance(m, dict))
-        else:
-            content = str(messages)[:1000]
-        summary = content[:150] if content else f"session {sid}"
-        insert_chunk(conn, f"lme_{sid}", summary, content[:1000],
-                     importance=0.6, access_count=1 if access_tracking else 0)
-
-    # Query per question
     total_recall = 0
     n_questions = 0
     for q in questions:
@@ -665,58 +835,68 @@ def _run_lme_retrieval(lme_data, access_tracking=True):
         if not query:
             continue
         evidence_sids = set(q.get("answer_session_ids", []))
+        if not evidence_sids:
+            continue
 
-        results = fts_search(conn, query, top_k=10, project="bench")
-        retrieved_ids = {r.get("id", "").replace("lme_", "") for r in results}
+        # Per-question isolated DB (matches production pipeline exactly)
+        conn, path = create_test_db()
+        project = f"lme_{q.get('question_id', n_questions)}"
+        _ingest_question_sessions(conn, q, project)
 
-        if evidence_sids:
-            hit = len(evidence_sids & retrieved_ids) / len(evidence_sids)
-            total_recall += hit
-            n_questions += 1
+        results = fts_search(conn, query, top_k=10, project=project)
+        retrieved_ids = {r.get("id", "") for r in results}
 
-    conn.close()
-    os.unlink(path)
+        hit = len(evidence_sids & retrieved_ids) / len(evidence_sids)
+        total_recall += hit
+        n_questions += 1
+
+        conn.close()
+        os.unlink(path)
+
     return total_recall / max(1, n_questions)
 
 
-def _run_lme_retrieval_preload(lme_data, top_k=50):
-    """Ablation: pre-load top-50 at start, don't do per-question retrieval."""
-    conn, path = create_test_db()
+def _run_lme_retrieval_preload(lme_data, top_k=10):
+    """Ablation: pre-load top-K at session start instead of per-query retrieval.
+
+    Fair comparison: for each question, ingest all sessions, then preload
+    top-K using a generic session-summary query ONCE, and check if answer
+    sessions are in that static preload set.
+    """
     questions = lme_data if isinstance(lme_data, list) else lme_data.get("questions", lme_data.get("data", []))
-
-    all_sessions = {}
-    for q in questions:
-        sids = q.get("haystack_session_ids", [])
-        sessions = q.get("haystack_sessions", [])
-        for i, sid in enumerate(sids):
-            if sid not in all_sessions and i < len(sessions):
-                all_sessions[sid] = sessions[i]
-
-    for sid, messages in all_sessions.items():
-        if isinstance(messages, list):
-            content = " ".join(m.get("content", "")[:200] for m in messages[:20] if isinstance(m, dict))
-        else:
-            content = str(messages)[:1000]
-        summary = content[:150] if content else f"session {sid}"
-        insert_chunk(conn, f"lme_{sid}", summary, content[:1000],
-                     importance=0.6, access_count=1)
-
-    # Pre-load: retrieve top-50 with a generic query (simulating session-start preload)
-    preloaded = fts_search(conn, "information knowledge context", top_k=top_k, project="bench")
-    preload_ids = {r.get("id", "").replace("lme_", "") for r in preloaded}
 
     total_recall = 0
     n_questions = 0
     for q in questions:
         evidence_sids = set(q.get("answer_session_ids", []))
+        if not evidence_sids:
+            continue
 
-        if evidence_sids:
-            hit = len(evidence_sids & preload_ids) / len(evidence_sids)
-            total_recall += hit
-            n_questions += 1
+        conn, path = create_test_db()
+        project = f"lme_{q.get('question_id', n_questions)}"
+        _ingest_question_sessions(conn, q, project)
 
-    conn.close()
-    os.unlink(path)
+        # Preload: use first user message from most recent session as generic query
+        # (simulates "what was I working on?" session-start retrieval)
+        sids = q.get("haystack_session_ids", [])
+        sessions = q.get("haystack_sessions", [])
+        if sessions:
+            last_session = sessions[-1]
+            user_msgs = [m["content"] for m in last_session if isinstance(m, dict) and m.get("role") == "user"]
+            preload_query = user_msgs[0][:50] if user_msgs else "recent conversation"
+        else:
+            preload_query = "recent conversation"
+
+        preloaded = fts_search(conn, preload_query, top_k=top_k, project=project)
+        preload_ids = {r.get("id", "") for r in preloaded}
+
+        hit = len(evidence_sids & preload_ids) / len(evidence_sids)
+        total_recall += hit
+        n_questions += 1
+
+        conn.close()
+        os.unlink(path)
+
     return total_recall / max(1, n_questions)
 
 
