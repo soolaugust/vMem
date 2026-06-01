@@ -15,7 +15,10 @@
 \usepackage{algorithmic}
 \usepackage{url}
 \usepackage{tikz}
-\usetikzlibrary{positioning,arrows.meta,fit,backgrounds}
+\usepackage{pifont}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usetikzlibrary{positioning,arrows.meta,fit,backgrounds,patterns}
 
 \title{\textbf{Memory-OS: Systematic OS Abstractions for LLM Agent Memory\\with Verifiable Pin Guarantees}}
 
@@ -43,6 +46,59 @@ The system is deployed as an open-source Claude Code plugin (MIT) with 10{,}700+
 \label{sec:intro}
 
 Long-running LLM agents accumulate knowledge across sessions: architectural decisions, user preferences, domain constraints, and inter-agent agreements. When the context window compacts or a session ends, this knowledge vanishes unless persisted externally. The resulting ``context compaction'' problem---where agents repeatedly re-learn previously established facts---motivates the growing body of work on persistent memory for agents~\cite{longmemeval2024,memgpt2023}.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[
+  font=\small,
+  timeline/.style={thick, ->, >=stealth},
+  event/.style={fill=blue!10, draw=blue!40, rounded corners=2pt, inner sep=3pt, font=\scriptsize},
+  bad/.style={fill=red!10, draw=red!60, rounded corners=2pt, inner sep=3pt, font=\scriptsize},
+  good/.style={fill=green!10, draw=green!60, rounded corners=2pt, inner sep=3pt, font=\scriptsize},
+  pinlbl/.style={fill=yellow!20, draw=orange!60, rounded corners=2pt, inner sep=2pt, font=\scriptsize\bfseries},
+]
+
+% === Top: Without Pin Semantics ===
+\node[anchor=west, font=\small\bfseries] at (-0.5, 2.8) {(a) Without pin semantics (existing systems)};
+\draw[timeline] (0,2.2) -- (8.5,2.2) node[right, font=\scriptsize] {time};
+
+\node[event] at (0.8, 2.6) {Store constraint};
+\node[event] at (3.0, 2.6) {Memory pressure};
+\node[bad] at (5.2, 2.6) {\textbf{Constraint evicted}};
+\node[bad] at (7.8, 2.6) {\ding{55} Agent violates};
+
+\draw[->, red!60, thick] (3.8, 2.6) -- (4.4, 2.6);
+\draw[->, red!60, thick] (6.2, 2.6) -- (7.0, 2.6);
+
+% Chunk bar
+\fill[blue!30] (0.3, 1.8) rectangle (4.5, 2.0);
+\fill[red!30] (4.5, 1.8) rectangle (8.2, 2.0);
+\node[font=\tiny, anchor=west] at (0.3, 1.7) {constraint alive};
+\node[font=\tiny, anchor=west] at (4.5, 1.7) {constraint gone};
+
+% === Bottom: With Pin Semantics ===
+\node[anchor=west, font=\small\bfseries] at (-0.5, 0.8) {(b) With pin semantics (Memory-OS)};
+\draw[timeline] (0,0.2) -- (8.5,0.2) node[right, font=\scriptsize] {time};
+
+\node[event] at (0.8, 0.6) {Store + \textbf{pin}};
+\node[event] at (3.0, 0.6) {Memory pressure};
+\node[good] at (5.2, 0.6) {Pin blocks eviction};
+\node[good] at (7.8, 0.6) {\ding{51} Agent complies};
+
+\draw[->, green!60, thick] (3.8, 0.6) -- (4.4, 0.6);
+\draw[->, green!60, thick] (6.2, 0.6) -- (7.0, 0.6);
+
+% Chunk bar (solid throughout)
+\fill[green!30] (0.3, -0.2) rectangle (8.2, 0.0);
+\node[font=\tiny, anchor=west] at (0.3, -0.3) {constraint alive (pinned, immune to eviction)};
+
+% Pin icon
+\node[pinlbl] at (1.5, -0.1) {\small\texttt{mlock}};
+
+\end{tikzpicture}
+\caption{The pin-guarantee problem. (a)~Existing systems evict constraints under memory pressure, causing agents to re-violate established rules. (b)~Memory-OS's \texttt{mlock}-inspired pin semantics guarantee constraint survival regardless of pressure.}
+\label{fig:motivation}
+\end{figure}
 
 Recent systems address this by providing persistent memory stores for agents. Mem0~\cite{mem0}, Letta (MemGPT)~\cite{memgpt2023}, Zep~\cite{zep2024}, and A-Mem~\cite{amem2025} offer vector-based retrieval with various augmentations. More recently, AMV-L~\cite{amvl2026} treats agent memory as a ``managed systems resource'' with lifecycle-driven eviction, and HTM-EAR~\cite{htmear2026} employs hierarchical tiered memory with importance-aware eviction watermarks.
 
@@ -118,47 +174,74 @@ HTM-EAR~\cite{htmear2026}  & ---  & \checkmark & \checkmark & ---  & ---  & --- 
 \begin{figure*}[t]
 \centering
 \begin{tikzpicture}[
-  node distance=1.0cm,
-  block/.style={rectangle, draw, rounded corners, minimum width=2.5cm, minimum height=0.8cm, align=center, font=\small},
-  osblock/.style={block, fill=blue!10},
-  agentblock/.style={block, fill=green!10},
+  node distance=0.8cm and 1.2cm,
+  block/.style={rectangle, draw, rounded corners=3pt, minimum height=0.7cm, align=center, font=\small},
+  write/.style={block, fill=blue!15, draw=blue!50, minimum width=2.0cm},
+  store/.style={block, fill=gray!10, draw=gray!50, minimum width=2.2cm},
+  retrieve/.style={block, fill=green!15, draw=green!50, minimum width=2.0cm},
+  evictb/.style={block, fill=red!10, draw=red!50, minimum width=2.0cm},
+  pinb/.style={block, fill=orange!15, draw=orange!50, minimum width=1.8cm},
+  ckptb/.style={block, fill=purple!10, draw=purple!50, minimum width=2.0cm},
+  agent/.style={block, fill=yellow!10, draw=yellow!60, minimum width=2.5cm},
   arrow/.style={-{Stealth[length=2mm]}, thick},
-  lbl/.style={font=\scriptsize\itshape, text=gray, midway, above}
+  darrow/.style={-{Stealth[length=2mm]}, thick, dashed},
+  note/.style={font=\tiny\itshape, text=gray!70},
 ]
 
-% OS Side (left column)
-\node[osblock]                (dp)  {Demand Paging};
-\node[osblock, below=of dp]  (ksw) {kswapd};
-\node[osblock, below=of ksw] (dam) {DAMON};
-\node[osblock, below=of dam] (ml)  {mlock};
-\node[osblock, below=of ml]  (criu){CRIU};
-\node[osblock, below=of criu](kw)  {kworker};
-\node[osblock, below=of kw]  (shm) {shmem};
+% Agent on the left
+\node[agent] (ag) {LLM Agent\\(reasoning)};
 
-% Agent Side (right column, aligned with left)
-\node[agentblock, right=6cm of dp]  (lookup) {memory\_lookup};
-\node[agentblock, right=6cm of ksw] (evict)  {Watermark Eviction};
-\node[agentblock, right=6cm of dam] (track)  {Access Tracking};
-\node[agentblock, right=6cm of ml]  (pin)    {Hard/Soft Pin};
-\node[agentblock, right=6cm of criu](ckpt)   {Session Checkpoint};
-\node[agentblock, right=6cm of kw]  (async)  {Async Hooks};
-\node[agentblock, right=6cm of shm] (wal)    {WAL Shared SQLite};
+% Write path (top)
+\node[write, right=1.5cm of ag, yshift=1.5cm] (ext) {Extractor\\{\tiny(kworker, async)}};
+\node[store, right=of ext] (db) {SQLite Store\\{\tiny(FTS5 + WAL)}};
 
-% Arrows
-\draw[arrow] (dp)   -- node[lbl] {page fault $\to$ query}  (lookup);
-\draw[arrow] (ksw)  -- node[lbl] {watermarks}              (evict);
-\draw[arrow] (dam)  -- node[lbl] {access frequency}        (track);
-\draw[arrow] (ml)   -- node[lbl] {lock pages}              (pin);
-\draw[arrow] (criu) -- node[lbl] {snapshot/restore}        (ckpt);
-\draw[arrow] (kw)   -- node[lbl] {deferred work}           (async);
-\draw[arrow] (shm)  -- node[lbl] {MAP\_SHARED}             (wal);
+% Retrieve path (bottom)
+\node[retrieve, right=1.5cm of ag, yshift=-1.5cm] (ret) {Retriever\\{\tiny(demand paging)}};
 
-% Column headers
-\node[above=0.4cm of dp, font=\small\bfseries]     {Linux Kernel};
-\node[above=0.4cm of lookup, font=\small\bfseries]  {Memory-OS};
+% Eviction (below store)
+\node[evictb, below=0.6cm of db] (ksw) {kswapd\\{\tiny(watermark evict)}};
+
+% Pin (right of store)
+\node[pinb, right=of db] (pin) {mlock\\{\tiny(pin state)}};
+
+% DAMON (between store and evict)
+\node[note, left=0.1cm of ksw, anchor=east] (dam) {DAMON tracking};
+
+% CRIU (above store)
+\node[ckptb, above=0.5cm of db] (criu) {CRIU\\{\tiny(checkpoint)}};
+
+% Multi-agent (far right)
+\node[agent, right=of pin, yshift=-1.2cm] (ag2) {Agent B\\{\tiny(concurrent)}};
+
+% Arrows: Write path
+\draw[arrow, blue!60] (ag) |- node[note, above, pos=0.7] {UserPromptSubmit} (ext);
+\draw[arrow, blue!60] (ext) -- node[note, above] {insert\_chunk} (db);
+
+% Arrows: Retrieve path
+\draw[arrow, green!60] (ag) |- node[note, below, pos=0.7] {memory\_lookup} (ret);
+\draw[arrow, green!60] (ret) -- node[note, below] {FTS5+BM25} (db);
+\draw[darrow, green!60] (ret) -| node[note, right, pos=0.3] {result} (ag);
+
+% Arrows: Eviction
+\draw[arrow, red!50] (db) -- node[note, right] {count $>$ high\_wm} (ksw);
+\draw[darrow, red!50] (ksw) -- node[note, below, pos=0.5] {delete cold} (db);
+
+% Pin blocks eviction
+\draw[arrow, orange!60] (pin) -- node[note, above] {skip} (ksw);
+\draw[arrow, orange!60] (db) -- node[note, above] {pin\_memory} (pin);
+
+% CRIU
+\draw[darrow, purple!50] (db) -- node[note, left] {Stop} (criu);
+\draw[darrow, purple!50] (criu) -- node[note, right] {Start} (db);
+
+% Multi-agent WAL
+\draw[arrow, yellow!70!black] (db) -| node[note, right, pos=0.3] {WAL read} (ag2);
+
+% Access tracking annotation
+\draw[darrow, gray] (ret.north) -- ++(0, 0.4) -| node[note, above, pos=0.25] {access\_count++} (db.south west);
 
 \end{tikzpicture}
-\caption{Architecture: each OS memory subsystem (left) maps 1:1 to a Memory-OS operation (right), preserving the semantic guarantees of the original primitive.}
+\caption{Memory-OS architecture as a data-flow diagram. Chunks flow through write (blue), retrieval (green), eviction (red), and checkpoint (purple) paths. Pin state (orange) blocks eviction; WAL mode enables concurrent multi-agent access (yellow). OS primitive analogs annotated.}
 \label{fig:arch}
 \end{figure*}
 
@@ -334,7 +417,44 @@ temporal-reasoning        & 0.903 & 133 \\
 \end{tabular}
 \end{table}
 
-\paragraph{Analysis.} Memory-OS achieves 94.2\% session recall and 98\% hit rate using only BM25+FTS5 (no embedding model). Performance is strongest on single-session queries (97--100\%) and weakest on temporal reasoning (90.3\%), where paraphrased time references challenge lexical matching. Compared to Mem0's reported 94.8 on LongMemEval (using learned embeddings + reranking), our BM25-only approach achieves competitive retrieval recall while requiring zero external dependencies.
+\paragraph{Analysis.} Memory-OS achieves 94.2\% session recall and 98\% hit rate using only BM25+FTS5 (no embedding model). Performance is strongest on single-session queries (97--100\%) and weakest on temporal reasoning (90.3\%), where paraphrased time references challenge lexical matching. Compared to Mem0's reported 94.8 on LongMemEval (using learned embeddings + reranking), our BM25-only approach achieves competitive retrieval recall while requiring zero external dependencies. Figure~\ref{fig:lme_results} visualizes the per-type breakdown.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    ybar,
+    bar width=9pt,
+    width=\columnwidth,
+    height=4.2cm,
+    ylabel={Session Recall},
+    ylabel style={font=\small},
+    ymin=0.8, ymax=1.05,
+    ytick={0.80, 0.85, 0.90, 0.95, 1.00},
+    symbolic x coords={user, asst, pref, know, multi, temp},
+    xtick=data,
+    xticklabels={Single\\User, Single\\Asst, Single\\Pref, Know.\\Update, Multi\\Session, Temporal},
+    x tick label style={font=\tiny, align=center},
+    y tick label style={font=\scriptsize},
+    nodes near coords,
+    nodes near coords style={font=\tiny, above},
+    every node near coord/.append style={/pgf/number format/.cd, fixed, precision=2},
+    grid=major,
+    grid style={dashed, gray!30},
+]
+\addplot[fill=blue!50, draw=blue!70] coordinates {
+    (user, 0.971)
+    (asst, 1.000)
+    (pref, 0.933)
+    (know, 0.974)
+    (multi, 0.924)
+    (temp, 0.903)
+};
+\end{axis}
+\end{tikzpicture}
+\caption{LongMemEval session recall by question type. Temporal reasoning (requiring time-reference matching) is the weakest category for lexical retrieval.}
+\label{fig:lme_results}
+\end{figure}
 
 \paragraph{Latency advantage.} At 0.09ms p50 per query (vs.\ 35ms for embedding-based search), Memory-OS enables demand-paging semantics where the agent retrieves \emph{during reasoning} without perceptible delay---making multi-round retrieval practical within a single LLM turn.
 
@@ -416,7 +536,45 @@ Vector (embedding)         & 35.0           & 42.1          & 274MB \\
 \end{tabular}
 \end{table}
 
-\paragraph{Scaling behavior.} FTS5 search scales sub-linearly with store size: at 100/1{,}000/10{,}000 chunks, p50 latency is 0.04/0.06/0.09ms respectively (B-tree index lookup). This enables the demand-paging design: multiple \texttt{memory\_lookup} calls per LLM turn add negligible overhead ($<$1ms total) compared to inference latency ($\sim$1--10s).
+\paragraph{Scaling behavior.} FTS5 search scales sub-linearly with store size (Figure~\ref{fig:scaling}). This enables the demand-paging design: multiple \texttt{memory\_lookup} calls per LLM turn add negligible overhead ($<$1ms total) compared to inference latency ($\sim$1--10s).
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=\columnwidth,
+    height=4cm,
+    xlabel={Store size (chunks)},
+    ylabel={Lookup latency (ms)},
+    xlabel style={font=\small},
+    ylabel style={font=\small},
+    xmode=log,
+    log basis x=10,
+    xmin=50, xmax=15000,
+    ymin=0, ymax=0.6,
+    xtick={100, 500, 1000, 5000, 10000},
+    xticklabels={100, 500, 1K, 5K, 10K},
+    x tick label style={font=\scriptsize},
+    y tick label style={font=\scriptsize},
+    grid=major,
+    grid style={dashed, gray!30},
+    legend style={font=\scriptsize, at={(0.02,0.98)}, anchor=north west},
+]
+\addplot[blue, thick, mark=*] coordinates {
+    (100, 0.228) (500, 0.290) (1000, 0.339) (5000, 0.295) (10000, 0.286)
+};
+\addlegendentry{p50}
+\addplot[red, thick, mark=triangle*, dashed] coordinates {
+    (100, 0.281) (500, 0.349) (1000, 0.524) (5000, 0.413) (10000, 0.472)
+};
+\addlegendentry{p95}
+
+\node[font=\tiny, gray, anchor=south west] at (axis cs:200, 0.52) {Embedding search: 35ms (off-scale, 389$\times$ slower)};
+\end{axis}
+\end{tikzpicture}
+\caption{FTS5 lookup latency vs.\ store size. Sub-millisecond at all scales; embedding search (35ms, off-scale) shown for reference.}
+\label{fig:scaling}
+\end{figure}
 
 \paragraph{Write and pin operations.} Write: 2.34ms p50 (FTS5 index update). Pin: 0.007ms p50 (single row UPDATE). Both well within MCP timeout constraints. Eviction sweeps run asynchronously (kworker pattern).
 
@@ -457,7 +615,38 @@ Each primitive contributes exactly one irreplaceable guarantee. The ablation con
 
 Memory-OS has been deployed as a Claude Code plugin by the first author in daily kernel development and software engineering workflows. We report qualitative observations from single-user deployment (not a controlled user study):
 
-\paragraph{Pin usage patterns.} The deployed store contains hard-pinned architectural constraints and API contracts. These represent a small fraction of total chunks but are disproportionately critical---their loss causes observable agent misbehavior (re-violating previously-established constraints).
+\paragraph{Pin usage patterns.} The deployed store contains hard-pinned architectural constraints and API contracts. These represent a small fraction of total chunks but are disproportionately critical---their loss causes observable agent misbehavior (re-violating previously-established constraints). Figure~\ref{fig:casestudy} shows a representative interaction trace.
+
+\begin{figure}[t]
+\centering
+\small
+\begin{tikzpicture}[
+  node distance=0.3cm,
+  sbox/.style={rectangle, draw=gray!60, fill=gray!5, rounded corners=2pt, text width=\columnwidth-1.2cm, inner sep=4pt, font=\scriptsize},
+  pinned/.style={sbox, draw=orange!70, fill=orange!5},
+  evict/.style={sbox, draw=red!60, fill=red!5},
+  survive/.style={sbox, draw=green!60, fill=green!5},
+  lbl/.style={font=\tiny\bfseries, anchor=east},
+]
+
+% Timeline
+\node[sbox] (s1) {\textbf{Session 1:} User establishes constraint --- ``git commit author must use exact git config values, no case modification''};
+\node[pinned, below=of s1] (s2) {\textbf{Extractor:} Stores as \texttt{design\_constraint}, importance=0.95. \textbf{Auto-pinned} (hard) due to type + high importance.};
+\node[sbox, below=of s2] (s3) {\textbf{Sessions 2--15:} 200+ chunks accumulated (code decisions, debugging notes, API findings). Store reaches high watermark.};
+\node[evict, below=of s3] (s4) {\textbf{kswapd:} Eviction sweep activates. 160 cold chunks evicted. \underline{Pinned constraint skipped.}};
+\node[survive, below=of s4] (s5) {\textbf{Session 16:} Agent formats \texttt{git commit} --- retrieves pinned constraint via demand paging --- correctly uses lowercase \texttt{zhidao su} from git config.};
+
+% Labels
+\node[lbl] at ([xshift=-2pt]s1.west) {\color{blue}t=0};
+\node[lbl] at ([xshift=-2pt]s2.west) {\color{orange}pin};
+\node[lbl] at ([xshift=-2pt]s3.west) {\color{blue}t+14d};
+\node[lbl] at ([xshift=-2pt]s4.west) {\color{red}evict};
+\node[lbl] at ([xshift=-2pt]s5.west) {\color{green!50!black}recall};
+
+\end{tikzpicture}
+\caption{Case study from production deployment. A constraint pinned in Session~1 survives 14 days of memory pressure (160 evictions) and is correctly recalled via demand paging in Session~16, preventing a previously-observed agent error.}
+\label{fig:casestudy}
+\end{figure}
 
 \paragraph{Store growth.} The production store currently holds $\sim$40 chunks after eviction (22 active). During active development sessions, chunk count grows rapidly before watermark-triggered eviction reduces it. The 10{,}000-chunk latency benchmark (0.09ms p50) confirms FTS5 scales well beyond current production usage.
 
