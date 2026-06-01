@@ -1,0 +1,80 @@
+\begin{thebibliography}{10}
+
+\bibitem{episodicsemantic2026}
+Various Authors.
+\newblock Episodic-semantic memory architecture for agent context management.
+\newblock {\em arXiv preprint arXiv:2605.17625}, 2026.
+
+\bibitem{humaninspired2026}
+Various Authors.
+\newblock Human-inspired memory architecture for llm agents.
+\newblock {\em arXiv preprint arXiv:2605.08538}, 2026.
+
+\bibitem{neusymms2026}
+Various Authors.
+\newblock Neusymms: Hybrid neuro-symbolic memory system for ai agents.
+\newblock {\em arXiv preprint arXiv:2605.17596}, 2026.
+
+\bibitem{amvl2026}
+Emmanuel Bamidele.
+\newblock Amv-l: Lifecycle-managed agent memory for tail-latency control in
+  long-running llm systems.
+\newblock {\em arXiv preprint arXiv:2603.04443}, 2026.
+
+\bibitem{memtrace2026}
+Xinle Deng, Ruobin Zhong, Hujin Peng, Xiaoben Lu, Yanzhe Wu, Guang Li, Buqiang
+  Xu, Yunzhi Yao, Jizhan Fang, Haoliang Cao, Junjie Guo, Yuan Yuan, Ziqing Ma,
+  Yuanqiang Yu, Rui Hu, Baohua Dong, Hangcheng Zhu, and Ningyu Zhang.
+\newblock Memtrace: Tracing and attributing errors in large language model
+  memory systems.
+\newblock {\em arXiv preprint arXiv:2605.28732}, 2026.
+
+\bibitem{fluxmem2026}
+Jizhan Fang, Buqiang Xu, Zhixian Wang, Haoliang Cao, Xinle Deng, Baohua Dong,
+  Hangcheng Zhu, Ruohui Huang, Gang Yu, Ying Wei, Guozhou Zheng, Feiyu Xiong,
+  Haofen Wang, Huajun Chen, and Ningyu Zhang.
+\newblock Rethinking memory as continuously evolving connectivity.
+\newblock {\em arXiv preprint arXiv:2605.28773}, 2026.
+
+\bibitem{zep2024}
+{Getzep Inc.}
+\newblock Zep: Long-term memory for ai assistants.
+\newblock \url{https://github.com/getzep/zep}, 2024.
+
+\bibitem{tac2026}
+Guoxin Ma, Yibing Liu, Chengzhengxu Li, Yu~Liang, Yan Wang, Yueyang Zhang,
+  Kecheng Chen, Zhaohan Zhang, Zhiyuan Sun, and Daiting Shi.
+\newblock Thinking as compression: Your reasoning model is secretly a context
+  compressor.
+\newblock {\em arXiv preprint arXiv:2605.28713}, 2026.
+
+\bibitem{mem0}
+{Mem0 AI}.
+\newblock Mem0: The memory layer for personalized ai.
+\newblock \url{https://github.com/mem0ai/mem0}, 2024.
+
+\bibitem{memgpt2023}
+Charles Packer, Sarah Wooders, Kevin Lin, Vivian Fang, Shishir~G. Patil, Ion
+  Stoica, and Joseph~E. Gonzalez.
+\newblock Memgpt: Towards llms as operating systems.
+\newblock {\em arXiv preprint arXiv:2310.08560}, 2023.
+
+\bibitem{htmear2026}
+Shubham~Kumar Singh.
+\newblock Htm-ear: Importance-preserving tiered memory with hybrid routing
+  under saturation.
+\newblock {\em arXiv preprint arXiv:2603.10032}, 2026.
+
+\bibitem{longmemeval2024}
+Di~Wu, Hongwei Wang, Wenhao Yu, Yuwei Zhang, Kai-Wei Chang, and Dong Yu.
+\newblock Longmemeval: Benchmarking chat assistants on long-term interactive
+  memory.
+\newblock {\em arXiv preprint arXiv:2407.11813}, 2024.
+
+\bibitem{amem2025}
+Wujiang Xu, Zujie Liang, Kai Mei, Hang Gao, Juntao Li, Wei Liu, Yuyao Zhang,
+  and Yongfeng Zhang.
+\newblock A-mem: Agentic memory for llm agents.
+\newblock {\em arXiv preprint arXiv:2502.12110}, 2025.
+
+\end{thebibliography}
