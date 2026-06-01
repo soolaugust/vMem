@@ -24,8 +24,8 @@
 
 \author{
   Zhidao Su \\
-  \texttt{soolaugust@gmail.com} \\
-  \url{https://github.com/soolaugust/0CompactMem}
+  Xiaomi Inc. \\
+  \texttt{suzhidao@xiaomi.com}
 }
 
 \date{}
@@ -98,7 +98,7 @@ Long-running LLM agents accumulate knowledge across sessions: architectural deci
 \label{fig:motivation}
 \end{figure}
 
-Recent systems address this by providing persistent memory stores for agents. Mem0~\cite{mem0}, Letta (MemGPT)~\cite{memgpt2023}, Zep~\cite{zep2024}, and A-Mem~\cite{amem2025} offer vector-based retrieval with various augmentations. More recently, AMV-L~\cite{amvl2026} treats agent memory as a ``managed systems resource'' with lifecycle-driven eviction, and HTM-EAR~\cite{htmear2026} employs hierarchical tiered memory with importance-aware eviction watermarks.
+Recent systems address this by providing persistent memory stores for agents, building on Retrieval-Augmented Generation (RAG)~\cite{rag2020lewis}. Mem0~\cite{mem0}, Letta (MemGPT)~\cite{memgpt2023}, Zep~\cite{zep2024}, and A-Mem~\cite{amem2025} offer vector-based retrieval with various augmentations. More recently, AMV-L~\cite{amvl2026} treats agent memory as a ``managed systems resource'' with lifecycle-driven eviction, and HTM-EAR~\cite{htmear2026} employs hierarchical tiered memory with importance-aware eviction watermarks.
 
 However, the systems we surveyed map \emph{at most one or two} OS memory primitives---invariably eviction and sometimes tiered storage. This is analogous to building an operating system with only \texttt{kswapd} and no page fault handler, no \texttt{mlock}, no process isolation, and no checkpoint mechanism. The result: no system can \emph{guarantee} that a critical constraint survives arbitrary memory pressure; no system provides on-demand retrieval that scales sub-linearly with store size; and no system enables multiple agents to share memory without explicit synchronization protocols.
 
@@ -356,7 +356,7 @@ Multiple agent instances access the same SQLite database file. WAL (Write-Ahead 
 
 0CompactMem is implemented in Python (3.12+) as a single-file SQLite database with an MCP (Model Context Protocol) server interface. Key implementation details:
 
-\paragraph{Storage.} All state resides in \texttt{\~{}/.claude/memory-os/store.db} (SQLite, WAL mode). The schema uses FTS5 virtual tables for full-text search, with standard tables for chunk metadata, pin state, and access tracking.
+\paragraph{Storage.} All state resides in a single SQLite~\cite{sqlite2020hipp} database file (WAL mode). The schema uses FTS5 virtual tables for full-text search (BM25 scoring~\cite{robertson2009bm25}), with standard tables for chunk metadata, pin state, and access tracking.
 
 \paragraph{MCP Interface.} Five tools are exposed via the MCP protocol:
 \begin{itemize}[leftmargin=*,nosep]
@@ -502,7 +502,7 @@ Vector (embedding only)    & \textbf{0.90} $\pm$ 0.02 & \textbf{0.73} $\pm$ 0.03
 
 \paragraph{Analysis.} Embedding search substantially outperforms BM25 on vocabulary-shifted queries (0.90 vs.\ 0.22). This is expected: BM25 requires lexical overlap while embeddings capture semantic similarity. We include this benchmark to honestly characterize the retrieval trade-off.
 
-\paragraph{Hybrid retrieval.} 0CompactMem's OS framework is backend-agnostic---the pin, eviction, and checkpoint semantics operate on chunk metadata regardless of how retrieval scoring works. As a proof-of-concept, we implemented Reciprocal Rank Fusion (RRF) combining BM25 with nomic-embed-text embeddings, achieving Recall@5 = 0.75 (vs.\ 0.22 BM25-only, 0.80 embedding-only). The hybrid approach retains all OS guarantees while closing the retrieval gap. We keep BM25-only as the default for zero-dependency deployment; hybrid mode is an optional sysctl-gated enhancement.
+\paragraph{Hybrid retrieval.} 0CompactMem's OS framework is backend-agnostic---the pin, eviction, and checkpoint semantics operate on chunk metadata regardless of how retrieval scoring works. As a proof-of-concept, we implemented Reciprocal Rank Fusion (RRF)~\cite{rrf2009cormack} combining BM25 with nomic-embed-text embeddings, achieving Recall@5 = 0.75 (vs.\ 0.22 BM25-only, 0.80 embedding-only). The hybrid approach retains all OS guarantees while closing the retrieval gap. We keep BM25-only as the default for zero-dependency deployment; hybrid mode is an optional sysctl-gated enhancement.
 
 \paragraph{Production context.} In the LongMemEval benchmark where queries use contextual terms (as agents do during reasoning), BM25 achieves 92.6\% recall---demonstrating that the paraphrasing gap is an artificial worst-case, not representative of real agent usage patterns.
 

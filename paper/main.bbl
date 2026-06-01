@@ -21,6 +21,13 @@ Emmanuel Bamidele.
   long-running llm systems.
 \newblock {\em arXiv preprint arXiv:2603.04443}, 2026.
 
+\bibitem{rrf2009cormack}
+Gordon~V. Cormack, Charles L.~A. Clarke, and Stefan B{\"u}ttcher.
+\newblock Reciprocal rank fusion outperforms condorcet and individual rank
+  learning methods.
+\newblock In {\em Proceedings of the 32nd International ACM SIGIR Conference},
+  pages 758--759, 2009.
+
 \bibitem{memtrace2026}
 Xinle Deng, Ruobin Zhong, Hujin Peng, Xiaoben Lu, Yanzhe Wu, Guang Li, Buqiang
   Xu, Yunzhi Yao, Jizhan Fang, Haoliang Cao, Junjie Guo, Yuan Yuan, Ziqing Ma,
@@ -36,10 +43,24 @@ Jizhan Fang, Buqiang Xu, Zhixian Wang, Haoliang Cao, Xinle Deng, Baohua Dong,
 \newblock Rethinking memory as continuously evolving connectivity.
 \newblock {\em arXiv preprint arXiv:2605.28773}, 2026.
 
+\bibitem{sqlite2020hipp}
+Kevin~P. Gaffney, Martin Prammer, Larry Brasfield, D.~Richard Hipp, Dan
+  Kennedy, and Jignesh~M. Patel.
+\newblock Sqlite: Past, present, and future.
+\newblock {\em Proceedings of the VLDB Endowment}, 15(12):3535--3547, 2022.
+
 \bibitem{zep2024}
 {Getzep Inc.}
 \newblock Zep: Long-term memory for ai assistants.
 \newblock \url{https://github.com/getzep/zep}, 2024.
+
+\bibitem{rag2020lewis}
+Patrick Lewis, Ethan Perez, Aleksandara Piktus, Fabio Petroni, Vladimir
+  Karpukhin, Naman Goyal, Heinrich K{\"u}ttler, Mike Lewis, Wen tau Yih, Tim
+  Rockt{\"a}schel, Sebastian Riedel, and Douwe Kiela.
+\newblock Retrieval-augmented generation for knowledge-intensive nlp tasks.
+\newblock In {\em Advances in Neural Information Processing Systems (NeurIPS)},
+  2020.
 
 \bibitem{tac2026}
 Guoxin Ma, Yibing Liu, Chengzhengxu Li, Yu~Liang, Yan Wang, Yueyang Zhang,
@@ -57,7 +78,14 @@ Guoxin Ma, Yibing Liu, Chengzhengxu Li, Yu~Liang, Yan Wang, Yueyang Zhang,
 Charles Packer, Sarah Wooders, Kevin Lin, Vivian Fang, Shishir~G. Patil, Ion
   Stoica, and Joseph~E. Gonzalez.
 \newblock Memgpt: Towards llms as operating systems.
-\newblock {\em arXiv preprint arXiv:2310.08560}, 2023.
+\newblock In {\em International Conference on Learning Representations (ICLR)},
+  2024.
+
+\bibitem{robertson2009bm25}
+Stephen Robertson and Hugo Zaragoza.
+\newblock The probabilistic relevance framework: Bm25 and beyond.
+\newblock {\em Foundations and Trends in Information Retrieval}, 3(4):333--389,
+  2009.
 
 \bibitem{htmear2026}
 Shubham~Kumar Singh.
