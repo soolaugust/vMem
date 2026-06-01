@@ -521,15 +521,15 @@ AMV-L (lifecycle)     & 0\%              & 0\%              & No \\
 
 \begin{table}[t]
 \centering
-\caption{Search latency at 10{,}000 chunks (measured, 1000 queries, 5 seeds).}
+\caption{Search latency at 10{,}000 chunks (measured, 1000 queries, 5 seeds). 0CompactMem requires no external model; vector baseline uses nomic-embed-text (274MB).}
 \label{tab:latency}
 \small
-\begin{tabular}{lccc}
+\begin{tabular}{lcc}
 \toprule
-System & p50 (ms) & p95 (ms) & Model Required \\
+System & p50 (ms) & p95 (ms) \\
 \midrule
-\textbf{0CompactMem (FTS5)} & \textbf{0.09} & \textbf{0.15} & None \\
-Vector (embedding)         & 35.0           & 42.1          & 274MB \\
+\textbf{0CompactMem (FTS5)} & \textbf{0.09} & \textbf{0.15} \\
+Vector (embedding)         & 35.0           & 42.1 \\
 \bottomrule
 \end{tabular}
 \end{table}
