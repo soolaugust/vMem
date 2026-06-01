@@ -49,6 +49,7 @@ Long-running LLM agents accumulate knowledge across sessions: architectural deci
 
 \begin{figure}[t]
 \centering
+\resizebox{\columnwidth}{!}{%
 \begin{tikzpicture}[
   font=\small,
   timeline/.style={thick, ->, >=stealth},
@@ -95,7 +96,8 @@ Long-running LLM agents accumulate knowledge across sessions: architectural deci
 % Pin icon
 \node[pinlbl] at (1.0, -0.35) {\scriptsize\texttt{mlock}};
 
-\end{tikzpicture}
+\end{tikzpicture}%
+}% end resizebox
 \caption{The pin-guarantee problem. (a)~Existing systems evict constraints under memory pressure, causing agents to re-violate established rules. (b)~Memory-OS's \texttt{mlock}-inspired pin semantics guarantee constraint survival regardless of pressure.}
 \label{fig:motivation}
 \end{figure}
@@ -185,7 +187,7 @@ HTM-EAR~\cite{htmear2026}  & ---  & \checkmark & \checkmark & ---  & ---  & --- 
   agent/.style={block, fill=yellow!10, draw=yellow!60, minimum width=2.5cm},
   arrow/.style={-{Stealth[length=2mm]}, thick},
   darrow/.style={-{Stealth[length=2mm]}, thick, dashed},
-  note/.style={font=\tiny\itshape, text=gray!70},
+  note/.style={font=\tiny\itshape, text=black!60},
 ]
 
 % Agent on the left
@@ -491,7 +493,7 @@ Vector (embedding only)    & \textbf{0.90} $\pm$ 0.02 & \textbf{0.73} $\pm$ 0.03
 
 \paragraph{Results.} See Table~\ref{tab:survival}.
 
-\begin{table}[!htb]
+\begin{table}[t]
 \centering
 \caption{Constraint survival under 4$\times$ pressure (50 pinned + 200 filler $\to$ evict to 50). 5 seeds, mean $\pm$ std.}
 \label{tab:survival}
@@ -521,7 +523,7 @@ AMV-L (lifecycle)     & 0\%              & 0\%              & No \\
 
 \subsection{Scalability and Latency}
 
-\begin{table}[!htb]
+\begin{table}[t]
 \centering
 \caption{Search latency at 10{,}000 chunks (measured, 1000 queries, 5 seeds).}
 \label{tab:latency}
@@ -582,7 +584,7 @@ Vector (embedding)         & 35.0           & 42.1          & 274MB \\
 
 We ablate each OS primitive on the LongMemEval retrieval benchmark and constraint survival test. Each variant removes one primitive while keeping others intact.
 
-\begin{table}[!htb]
+\begin{table}[t]
 \centering
 \caption{Quantitative ablation: each row removes one primitive. LME Recall measured on LongMemEval retrieval (500 questions). Survival measured under 4$\times$ pressure.}
 \label{tab:ablation}
