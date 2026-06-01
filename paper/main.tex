@@ -52,48 +52,48 @@ Long-running LLM agents accumulate knowledge across sessions: architectural deci
 \begin{tikzpicture}[
   font=\small,
   timeline/.style={thick, ->, >=stealth},
-  event/.style={fill=blue!10, draw=blue!40, rounded corners=2pt, inner sep=3pt, font=\scriptsize},
-  bad/.style={fill=red!10, draw=red!60, rounded corners=2pt, inner sep=3pt, font=\scriptsize},
-  good/.style={fill=green!10, draw=green!60, rounded corners=2pt, inner sep=3pt, font=\scriptsize},
-  pinlbl/.style={fill=yellow!20, draw=orange!60, rounded corners=2pt, inner sep=2pt, font=\scriptsize\bfseries},
+  event/.style={fill=blue!8, draw=blue!50, rounded corners=2pt, inner sep=3pt, font=\scriptsize},
+  bad/.style={fill=red!12, draw=red!70, rounded corners=2pt, inner sep=3pt, font=\scriptsize},
+  good/.style={fill=green!12, draw=green!70, rounded corners=2pt, inner sep=3pt, font=\scriptsize},
+  pinlbl/.style={fill=yellow!25, draw=orange!70, rounded corners=2pt, inner sep=2pt, font=\scriptsize\bfseries},
 ]
 
 % === Top: Without Pin Semantics ===
-\node[anchor=west, font=\small\bfseries] at (-0.5, 2.8) {(a) Without pin semantics (existing systems)};
-\draw[timeline] (0,2.2) -- (8.5,2.2) node[right, font=\scriptsize] {time};
+\node[anchor=west, font=\small\bfseries] at (-0.5, 3.4) {(a) Without pin semantics (existing systems)};
+\draw[timeline] (0,2.6) -- (8.5,2.6) node[right, font=\scriptsize] {time};
 
-\node[event] at (0.8, 2.6) {Store constraint};
-\node[event] at (3.0, 2.6) {Memory pressure};
-\node[bad] at (5.2, 2.6) {\textbf{Constraint evicted}};
-\node[bad] at (7.8, 2.6) {\ding{55} Agent violates};
+\node[event, anchor=south] at (0.8, 2.7) {Store constraint};
+\node[event, anchor=south] at (3.0, 2.7) {Memory pressure};
+\node[bad, anchor=south] at (5.3, 2.7) {\textbf{Constraint evicted}};
+\node[bad, anchor=south] at (7.8, 2.7) {\ding{55} Agent violates};
 
-\draw[->, red!60, thick] (3.8, 2.6) -- (4.4, 2.6);
-\draw[->, red!60, thick] (6.2, 2.6) -- (7.0, 2.6);
+\draw[->, red!80, thick] (3.9, 3.0) -- (4.4, 3.0);
+\draw[->, red!80, thick] (6.3, 3.0) -- (7.0, 3.0);
 
 % Chunk bar
-\fill[blue!30] (0.3, 1.8) rectangle (4.5, 2.0);
-\fill[red!30] (4.5, 1.8) rectangle (8.2, 2.0);
-\node[font=\tiny, anchor=west] at (0.3, 1.7) {constraint alive};
-\node[font=\tiny, anchor=west] at (4.5, 1.7) {constraint gone};
+\fill[blue!25] (0.3, 2.1) rectangle (4.5, 2.35);
+\fill[red!25] (4.5, 2.1) rectangle (8.2, 2.35);
+\node[font=\tiny, anchor=north west] at (0.3, 2.1) {constraint alive};
+\node[font=\tiny, anchor=north west] at (4.7, 2.1) {constraint gone};
 
 % === Bottom: With Pin Semantics ===
-\node[anchor=west, font=\small\bfseries] at (-0.5, 0.8) {(b) With pin semantics (Memory-OS)};
-\draw[timeline] (0,0.2) -- (8.5,0.2) node[right, font=\scriptsize] {time};
+\node[anchor=west, font=\small\bfseries] at (-0.5, 1.2) {(b) With pin semantics (Memory-OS)};
+\draw[timeline] (0,0.4) -- (8.5,0.4) node[right, font=\scriptsize] {time};
 
-\node[event] at (0.8, 0.6) {Store + \textbf{pin}};
-\node[event] at (3.0, 0.6) {Memory pressure};
-\node[good] at (5.2, 0.6) {Pin blocks eviction};
-\node[good] at (7.8, 0.6) {\ding{51} Agent complies};
+\node[event, anchor=south] at (0.8, 0.5) {Store + \textbf{pin}};
+\node[event, anchor=south] at (3.0, 0.5) {Memory pressure};
+\node[good, anchor=south] at (5.3, 0.5) {Pin blocks eviction};
+\node[good, anchor=south] at (7.8, 0.5) {\ding{51} Agent complies};
 
-\draw[->, green!60, thick] (3.8, 0.6) -- (4.4, 0.6);
-\draw[->, green!60, thick] (6.2, 0.6) -- (7.0, 0.6);
+\draw[->, green!70!black, thick] (3.9, 0.8) -- (4.4, 0.8);
+\draw[->, green!70!black, thick] (6.3, 0.8) -- (7.0, 0.8);
 
 % Chunk bar (solid throughout)
-\fill[green!30] (0.3, -0.2) rectangle (8.2, 0.0);
-\node[font=\tiny, anchor=west] at (0.3, -0.3) {constraint alive (pinned, immune to eviction)};
+\fill[green!25] (0.3, -0.1) rectangle (8.2, 0.15);
+\node[font=\tiny, anchor=north west] at (0.3, -0.1) {constraint alive (pinned, immune to eviction)};
 
 % Pin icon
-\node[pinlbl] at (1.5, -0.1) {\small\texttt{mlock}};
+\node[pinlbl] at (1.0, -0.35) {\scriptsize\texttt{mlock}};
 
 \end{tikzpicture}
 \caption{The pin-guarantee problem. (a)~Existing systems evict constraints under memory pressure, causing agents to re-violate established rules. (b)~Memory-OS's \texttt{mlock}-inspired pin semantics guarantee constraint survival regardless of pressure.}
