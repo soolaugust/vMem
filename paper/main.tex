@@ -25,7 +25,7 @@
 \author{
   Zhidao Su \\
   \texttt{soolaugust@gmail.com} \\
-  \url{https://github.com/soolaugust/memory-os}
+  \url{https://github.com/soolaugust/0CompactMem}
 }
 
 \date{}
@@ -38,7 +38,7 @@ Persistent memory for LLM agents has adopted eviction policies from OS memory ma
 
 We evaluate on the LongMemEval benchmark (500 questions across 6 question types), achieving 94.2\% retrieval session recall with sub-millisecond latency (0.09ms p50) and zero external dependencies. Under 4$\times$ memory pressure, pinned constraints achieve 100\% physical survival (82\% lexically retrievable), while systems without pins retain 0\%. Quantitative ablation on LongMemEval confirms each OS primitive contributes a distinct, irreplaceable guarantee: removing any single primitive causes binary loss of a system property.
 
-The system is deployed as an open-source Claude Code plugin (MIT) with 10{,}700+ test assertions, demonstrating that production-grade agent memory requires only a single SQLite file and principled application of OS abstractions. Code and benchmarks: \url{https://github.com/soolaugust/memory-os}.
+The system is deployed as an open-source Claude Code plugin (MIT) with 10{,}700+ test assertions, demonstrating that production-grade agent memory requires only a single SQLite file and principled application of OS abstractions. Code and benchmarks: \url{https://github.com/soolaugust/0CompactMem}.
 \end{abstract}
 
 %% ============================================================
@@ -578,25 +578,25 @@ Vector (embedding)         & 35.0           & 42.1          & 274MB \\
 
 \subsection{Quantitative Ablation}
 
-We ablate each OS primitive on the LongMemEval retrieval benchmark and constraint survival test. Each variant removes one primitive while keeping others intact.
+We ablate each OS primitive on the LongMemEval retrieval benchmark and constraint survival test. Each variant removes one primitive while keeping others intact (Table~\ref{tab:ablation}).
 
-\begin{table}[t]
+\begin{table*}[t]
 \centering
 \caption{Quantitative ablation: each row removes one primitive. LME Recall measured on LongMemEval retrieval (500 questions). Survival measured under 4$\times$ pressure.}
 \label{tab:ablation}
-\footnotesize
-\begin{tabular}{lccc}
+\small
+\begin{tabular}{lccl}
 \toprule
-Configuration & LME Recall & Survival & Property Lost \\
+Configuration & LME Recall & Constraint Survival & Property Lost \\
 \midrule
 Full system         & 0.942 & 100\% & (none) \\
-$-$ pin (mlock)     & 0.942 & 0\%   & Constraint guarantee \\
-$-$ demand paging   & 0.000 & 100\% & On-demand retrieval \\
-$-$ eviction        & 0.942 & 100\% & Bounded growth \\
+$-$ pin (mlock)     & 0.942 & 0\%   & Constraint survival guarantee \\
+$-$ demand paging   & 0.000 & 100\% & On-demand context-specific retrieval \\
+$-$ eviction        & 0.942 & 100\% & Bounded memory growth \\
 $-$ WAL sharing     & 0.942 & 100\% & Multi-agent visibility \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}
 
 \paragraph{Key findings:}
 \begin{enumerate}[leftmargin=*,nosep]
