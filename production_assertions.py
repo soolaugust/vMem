@@ -1091,6 +1091,19 @@ def run_all(fix: bool = False) -> dict:
     # 写日志
     _write_log(report)
 
+    # ── 复发检测（缺口3）：记录逐条断言历史，计算「第几次转红」──────────────────
+    # 根因：原系统只记汇总 passed/failed，无法回答「这个坑是第几次踩」，
+    # 导致复发的死链用同样的轻量修法反复修反复坏。此处补齐状态机。
+    try:
+        import assertion_history as _ah
+        _hconn = sqlite3.connect(str(STORE_DB), timeout=5)
+        _hconn.execute("PRAGMA journal_mode=WAL")
+        report["recurrence"] = _ah.record_run(
+            _hconn, [r.to_dict() for r in results])
+        _hconn.close()
+    except Exception as e:
+        report["recurrence"] = {"error": str(e)}
+
     return report
 
 
@@ -1141,6 +1154,18 @@ def print_report(report: dict, json_mode: bool = False):
                     print(f"       actual: {r['actual']}")
                 if "expected" in r:
                     print(f"       expected: {r['expected']}")
+
+    # 复发告警（缺口2+3）：哪些断言是「修了又坏」的，优先处理
+    rec = report.get("recurrence") or {}
+    try:
+        import assertion_history as _ah
+        alert = _ah.format_recurrence_alert(rec)
+        if alert:
+            print("\n" + alert)
+    except Exception:
+        pass
+    if rec.get("recovered"):
+        print(f"\n  ✅ 本次转绿: {', '.join(rec['recovered'])}")
     print()
 
 

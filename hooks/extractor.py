@@ -2902,6 +2902,82 @@ def _token_overlap(tok1: set, tok2: set) -> float:
     return len(tok1 & tok2) / min(len(tok1), len(tok2))
 
 
+def measure_application_sync(conn, project: str, session_id: str,
+                             output_text: str) -> int:
+    """ROI 信号采集（同步路径权威实现）：度量本 session 最近一次召回的 chunk
+    是否在模型输出中被实际应用，回填 apply_count。
+
+    根因（2026-06-05 复发）：原 _measure_application 只挂在不常驻的 extractor_pool
+    daemon（line 691），而 Stop hook 实际执行的是 extractor.py；daemon 未运行时
+    走 fallback 同步路径，该路径从不度量 → apply_count 恒为 0（死链）。
+    本函数自包含、不依赖抽取 pipeline，由 extractor.py main() 在 submit 之前
+    无条件调用，对 daemon/fallback 两条路径都生效，从根上消除死链。
+
+    幂等：仅处理 applied_ids_json IS NULL 的 trace，每条 trace 计一次。
+    返回被标记为「应用」的 chunk 数。
+    """
+    if not output_text or len(output_text) < 40:
+        return 0
+    try:
+        import json as _json
+        # 非对称重叠（summary 短 vs 输出长）：真实应用回显 3-7 特征词即达 0.15-0.25。
+        threshold = 0.18
+        try:
+            _v = _sysctl("apply_signal.overlap_threshold")
+            if _v is not None:
+                threshold = float(_v)
+        except Exception:
+            pass
+
+        row = conn.execute(
+            """SELECT id, top_k_json FROM recall_traces
+               WHERE session_id=? AND project=? AND injected=1
+                 AND top_k_json IS NOT NULL AND top_k_json != '[]'
+                 AND applied_ids_json IS NULL
+               ORDER BY timestamp DESC LIMIT 1""",
+            (session_id, project),
+        ).fetchone()
+        if not row:
+            return 0
+        trace_id, top_k_json = row[0], row[1]
+        try:
+            top_k = _json.loads(top_k_json) if top_k_json else []
+        except Exception:
+            return 0
+        if not top_k:
+            return 0
+
+        out_tok = _overlap_tokens(output_text)
+        if len(out_tok) < 3:
+            return 0
+
+        applied_ids = []
+        for c in top_k:
+            cid = c.get("id")
+            summ = c.get("summary", "")
+            if not cid or not summ:
+                continue
+            if _token_overlap(_overlap_tokens(summ), out_tok) >= threshold:
+                applied_ids.append(cid)
+
+        # 始终回填 applied_ids_json（即使为空 []）→ 标记「已测量」，保证幂等。
+        conn.execute(
+            "UPDATE recall_traces SET applied_ids_json=? WHERE id=?",
+            (_json.dumps(applied_ids, ensure_ascii=False), trace_id),
+        )
+        if applied_ids:
+            _ph = ",".join("?" * len(applied_ids))
+            conn.execute(
+                f"UPDATE memory_chunks SET apply_count=COALESCE(apply_count,0)+1, "
+                f"last_applied=? WHERE id IN ({_ph})",
+                [datetime.now(timezone.utc).isoformat()] + applied_ids,
+            )
+        conn.commit()
+        return len(applied_ids)
+    except Exception:
+        return 0  # 信号采集失败绝不影响主流程
+
+
 def _was_recently_recalled(conn, old_id: str, project: str, n: int = 20) -> bool:
     """旧 chunk 是否在最近 n 条 recall_trace 的 top_k 中出现过（确定性，只读）。
     用于隐式纠正：被 supersede 的旧 chunk 若近期仍被召回，说明它正在污染推理。
@@ -4717,6 +4793,18 @@ def main():
         session_id = (hook_input.get("session_id", "")
                       or os.environ.get("CLAUDE_SESSION_ID", "")
                       or "unknown")
+        # ── ROI 信号度量（submit 之前，对 daemon/fallback 两条路径都生效）──────────
+        # 根因防复发：度量不能依赖抽取 pipeline 或常驻 daemon——它必须挂在 Stop hook
+        # 必经的同步入口。轻量、只读 recall_traces + 文本重叠，开销 < 1ms。
+        try:
+            from store import open_db, ensure_schema
+            _mc = open_db(); ensure_schema(_mc)
+            measure_application_sync(
+                _mc, project, session_id,
+                hook_input.get("last_assistant_message", "") or text)
+            _mc.close()
+        except Exception:
+            pass  # 信号采集失败绝不影响抽取主流程
         from hooks.extractor_pool import submit_extract_task
         if submit_extract_task(hook_input, project, session_id):
             # 成功入队 → Stop hook 立即返回
