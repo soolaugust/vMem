@@ -98,6 +98,11 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         )
     """)
     _safe_add_column(conn, "memory_chunks", "access_count", "INTEGER DEFAULT 0")
+    # ROI 信号：apply_count — chunk 被「实际应用」次数（区别于 access_count 仅记「被召回」）。
+    # 召回的知识是否被模型用上，由 Stop hook 文本重叠检测回填（_measure_application）。
+    _safe_add_column(conn, "memory_chunks", "apply_count", "INTEGER DEFAULT 0")
+    # last_applied — 上次「真实应用」时间戳（2026-06-05 修复 apply_count 死链）。
+    _safe_add_column(conn, "memory_chunks", "last_applied", "TEXT")
     # 迭代38：oom_adj — per-chunk 淘汰优先级（-1000 绝对保护 ↔ +1000 优先淘汰）
     _safe_add_column(conn, "memory_chunks", "oom_adj", "INTEGER DEFAULT 0")
     # 迭代44：lru_gen — MGLRU 多代追踪（0=youngest, max_gen=oldest）
@@ -191,6 +196,9 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     # recall_traces 反馈列
     _safe_add_column(conn, "recall_traces", "user_feedback", "TEXT")
     _safe_add_column(conn, "recall_traces", "feedback_ts", "TEXT")
+    # ROI 信号：applied_ids_json — 本次召回中哪些 chunk 在模型输出里被实际应用（JSON id 数组）。
+    # NULL = 尚未测量（幂等守卫：仅对 NULL trace 计一次 apply_count）。
+    _safe_add_column(conn, "recall_traces", "applied_ids_json", "TEXT")
 
     # ── 迭代104：chunk_pins — 项目级 pin（OS 类比：VMA per-process mlock）──
     # 同一 chunk 在不同 project 中有独立的 pin 状态：

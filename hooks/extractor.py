@@ -2883,6 +2883,51 @@ _write_chunk_token_sets: list = []  # iter1066: semantic_overlap_gate token 缓�
 _write_chunk_session_counts: dict = {}  # iter1126: session_write_freq_cap — per-session 写入计数
 
 
+def _overlap_tokens(text: str) -> set:
+    """中英混合 tokenize：英文按 word，中文按 bigram。
+    iter1066 公式提取为可复用函数，供 _write_chunk 去重门控与应用信号检测共用。"""
+    if not text:
+        return set()
+    _words = re.findall(r'[a-z_][a-z0-9_]*', text.lower())
+    _cjk = re.findall('[一-鿿]', text)
+    _bigrams = [_cjk[i] + _cjk[i + 1] for i in range(len(_cjk) - 1)] if len(_cjk) >= 2 else _cjk
+    return set(_words + _bigrams)
+
+
+def _token_overlap(tok1: set, tok2: set) -> float:
+    """两 token 集合的重叠度 = |交集| / min(|tok1|, |tok2|)。
+    任一侧 <3 token 视为信息量不足，返回 0.0。"""
+    if len(tok1) < 3 or len(tok2) < 3:
+        return 0.0
+    return len(tok1 & tok2) / min(len(tok1), len(tok2))
+
+
+def _was_recently_recalled(conn, old_id: str, project: str, n: int = 20) -> bool:
+    """旧 chunk 是否在最近 n 条 recall_trace 的 top_k 中出现过（确定性，只读）。
+    用于隐式纠正：被 supersede 的旧 chunk 若近期仍被召回，说明它正在污染推理。
+    复用 recall_traces.top_k_json 查询范式（extractor.py:5956 同款）。"""
+    if not old_id:
+        return False
+    try:
+        import json as _json
+        rows = conn.execute(
+            """SELECT top_k_json FROM recall_traces
+               WHERE project=? AND top_k_json IS NOT NULL AND top_k_json != '[]'
+               ORDER BY timestamp DESC LIMIT ?""",
+            (project, n),
+        ).fetchall()
+        for (tkj,) in rows:
+            try:
+                for c in (_json.loads(tkj) if tkj else []):
+                    if c.get("id") == old_id:
+                        return True
+            except Exception:
+                continue
+        return False
+    except Exception:
+        return False
+
+
 def _write_chunk(chunk_type: str, summary: str, project: str, session_id: str,
                  topic: str = "", conn: sqlite3.Connection = None,
                  importance_override: float = None,
@@ -2918,16 +2963,11 @@ def _write_chunk(chunk_type: str, summary: str, project: str, session_id: str,
     # 修复：token-overlap >60%（基于较短方 token 数）跳过，保留最先写入的完整表述。
     global _write_chunk_token_sets
     # 中英混合 tokenize：英文按 word，中文按 bigram（单字太碎、长串不切分则太粗）
-    _words1066 = _re963.findall(r'[a-z_][a-z0-9_]*', summary.lower())
-    _cjk1066 = _re963.findall(r'[\u4e00-\u9fff]', summary)
-    _bigrams1066 = [_cjk1066[i] + _cjk1066[i+1] for i in range(len(_cjk1066)-1)] if len(_cjk1066) >= 2 else _cjk1066
-    _tok1066 = set(_words1066 + _bigrams1066)
+    # iter1066 \u516c\u5f0f\u5df2\u63d0\u53d6\u4e3a\u6a21\u5757\u7ea7 _overlap_tokens / _token_overlap\uff08\u5e94\u7528\u4fe1\u53f7\u68c0\u6d4b\u5171\u7528\uff09
+    _tok1066 = _overlap_tokens(summary)
     if len(_tok1066) >= 3:
         for _prev_toks in _write_chunk_token_sets:
-            if len(_prev_toks) < 3:
-                continue
-            _overlap = len(_tok1066 & _prev_toks) / min(len(_tok1066), len(_prev_toks))
-            if _overlap > 0.60:
+            if _token_overlap(_tok1066, _prev_toks) > 0.60:
                 return
     _write_chunk_token_sets.append(_tok1066)
     if len(_write_chunk_token_sets) > 500:
@@ -3896,6 +3936,17 @@ def _write_chunk(chunk_type: str, summary: str, project: str, session_id: str,
                                          reason=f"superseded by newer: {summary[:60]}",
                                          project=project,
                                          session_id=session_id)
+                        # 隐式纠正（真值信号增密）：被 supersede 的旧 chunk 若近期仍被召回，
+                        # 说明它正在污染当前推理 → 升级为 disputed（不只降 importance）。
+                        # 真值来源：supersede 演化事件 ∩ 召回历史，零 LLM 猜测。可恢复（正反馈拉回）。
+                        if _was_recently_recalled(conn, _old_id, project, n=20):
+                            try:
+                                from store_vfs import update_confidence as _upd_conf
+                                _upd_conf(conn, _old_id, -0.25,
+                                          "implicit_correction_superseded",
+                                          verification_status="disputed")
+                            except Exception:
+                                pass
             except Exception:
                 pass  # 冲突检测失败不影响主流程
 
@@ -5632,6 +5683,25 @@ def main():
         _slp_conn.close()
     except Exception:
         pass  # sleep_consolidate 失败不影响主流程
+
+    # ── Pin 衰退（write_feedback 机制3）— session 结束顺带回收冷 pin ──────────
+    # 接线（2026-06-05）：write_feedback.decay_stale_pins 此前是孤儿（仅测试引用），
+    # 现挂在 Sleep Consolidation 旁——语义上 pin 衰退属"睡眠巩固"的一部分。
+    # 依据 apply_count（被真正用上）而非 access_count，配合刚修复的 apply_count 死链。
+    try:
+        from write_feedback import decay_stale_pins as _decay_pins
+        _dp_conn = open_db()
+        ensure_schema(_dp_conn)
+        _dp_result = _decay_pins(_dp_conn, project=project)
+        if _dp_result.get("hard_to_soft") or _dp_result.get("unpinned"):
+            dmesg_log(_dp_conn, DMESG_INFO, "write_feedback",
+                      f"decay_stale_pins: hard→soft={_dp_result['hard_to_soft']} "
+                      f"unpinned={_dp_result['unpinned']} (apply_count=0 冷 pin 回收)",
+                      session_id=session_id, project=project)
+        _dp_conn.commit()
+        _dp_conn.close()
+    except Exception:
+        pass  # pin 衰退失败不影响主流程
 
     # ── iter374: Chunk Coalescing — Slab Allocator 合并碎片化小 chunk ────────
     # OS 类比：Linux Slab Allocator — 合并碎片化对象，提升内存利用率

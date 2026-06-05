@@ -277,6 +277,16 @@ def memory_stats(project: str | None = None) -> str:
             (project,)
         ).fetchone()[0]
 
+        # ROI 信号：真实应用 (apply_count > 0) — 区别于「被召回」，这是被模型实际用上的 chunk。
+        # COALESCE 兼容老库（apply_count 列惰性添加）。active 与 applied 的差距 = 召回浪费量。
+        try:
+            applied = conn.execute(
+                "SELECT COUNT(*) FROM memory_chunks WHERE project=? AND COALESCE(apply_count,0) > 0",
+                (project,)
+            ).fetchone()[0]
+        except Exception:
+            applied = 0
+
         # 最近写入
         recent = conn.execute(
             """SELECT id, chunk_type, summary FROM memory_chunks
@@ -286,6 +296,8 @@ def memory_stats(project: str | None = None) -> str:
 
         lines = [f"📊 Memory OS 知识库统计 (project={project})\n"]
         lines.append(f"  总量: {total} chunks，活跃: {active} ({active/total*100:.1f}% 被引用)" if total > 0 else "  总量: 0 chunks")
+        if total > 0:
+            lines.append(f"  真实应用: {applied} ({applied/total*100:.1f}% 被实际用上)  ← 召回≠应用，差距={active-applied}")
         lines.append("")
         lines.append("  类型分布:")
         for row in sorted(type_rows, key=lambda r: -r[1]):
@@ -459,6 +471,74 @@ def list_pinned(
         return "\n".join(lines)
     except Exception as e:
         return f"❌ 查询失败：{type(e).__name__}: {e}"
+    finally:
+        conn.close()
+
+
+@mcp.tool()
+def memory_applied(
+    chunk_ids: list[str],
+    project: str | None = None,
+) -> str:
+    """
+    回写「真实应用」信号：标记某些召回的 chunk 在本次推理中被实际用上了。
+    OS 类比：MMU Dirty bit — Accessed bit 只说明页被读过（召回），Dirty bit 才说明
+    页内容真正参与了计算并产生了影响（应用）。区分二者是回收决策的核心信号。
+
+    何时调用：当 memory_lookup 返回的某条知识**确实影响了你的输出/决策**时回写其
+    chunk_id。仅仅看到、但没用上的 chunk 不要回写——那正是「召回浪费」，apply_count
+    保持 0 才能让系统识别并衰减它。
+
+    与 access_count 的区别：
+      - access_count：被召回/注入即自增（无差别，量大）
+      - apply_count：被真正用上才自增（有判断，量少）→ apply_count/access_count = ROI
+
+    下游消费（已存在，此前因写入侧缺失而恒为 0）：
+      - store_vfs RTMC：apply_ratio 修正 stability 巩固量（零应用→floor 0.3 惩罚）
+      - write_feedback.decay_stale_pins：apply_count=0 的 pin 按冷度自动降级/解锁
+
+    Args:
+        chunk_ids: 本次推理中被实际应用的 chunk ID 列表（取自 memory_lookup 结果）
+        project: 项目 ID（默认自动解析当前目录）
+
+    Returns:
+        操作结果描述
+    """
+    if not chunk_ids:
+        return "⚠️ chunk_ids 为空，无回写。"
+
+    if not project:
+        try:
+            project = resolve_project_id()
+        except Exception:
+            project = "default"
+
+    try:
+        conn = _open_readwrite()
+    except FileNotFoundError as e:
+        return f"❌ 知识库未初始化：{e}"
+
+    try:
+        ensure_schema(conn)  # 保证 apply_count 列存在（惰性 ALTER）
+        now_iso = datetime.now(timezone.utc).isoformat()
+        placeholders = ",".join("?" * len(chunk_ids))
+        cur = conn.execute(
+            f"UPDATE memory_chunks "
+            f"SET apply_count = COALESCE(apply_count, 0) + 1, "
+            f"    last_applied = ? "
+            f"WHERE id IN ({placeholders})",
+            [now_iso, *chunk_ids],
+        )
+        conn.commit()
+        n = cur.rowcount
+        if n <= 0:
+            return f"❌ 未匹配任何 chunk（id 是否正确？project={project}）"
+        return (
+            f"✅ 已标记 {n}/{len(chunk_ids)} 条 chunk 为「真实应用」(apply_count +1)\n"
+            f"  这些知识的 stability 巩固与 pin 保护将不再吃零应用惩罚。"
+        )
+    except Exception as e:
+        return f"❌ apply 回写失败：{type(e).__name__}: {e}"
     finally:
         conn.close()
 

@@ -201,6 +201,55 @@ def assert_retriever_injects_knowledge(conn: sqlite3.Connection, fix: bool = Fal
     return r
 
 
+def assert_apply_signal_alive(conn: sqlite3.Connection, fix: bool = False) -> AssertionResult:
+    """
+    断言：apply_count 采集链是活的——有知识被注入时，应有知识被「真正应用」。
+
+    根因（2026-06-05）：apply_count 死链曾隐藏数周——_measure_application 只在不常驻的
+    extractor_pool daemon 路径，同步 fallback 从不度量，导致 44 条 chunk 的 apply_count
+    全为 0。死链之所以隐藏这么久，正因为没有探针在喊「这条链没跑」。本断言即该探针：
+    若近期有充足注入（≥10 次）却 0 条 chunk 被应用过，几乎可断定采集链又断了。
+    """
+    r = AssertionResult("apply_signal_alive", "feedback_loop")
+    t0 = time.time()
+
+    try:
+        recent_injected = conn.execute(
+            """SELECT COUNT(*) FROM recall_traces
+               WHERE injected=1 AND timestamp > datetime('now', '-7 days')"""
+        ).fetchone()[0]
+
+        applied_chunks = conn.execute(
+            "SELECT COUNT(*) FROM memory_chunks WHERE COALESCE(apply_count,0) > 0"
+        ).fetchone()[0]
+
+        # 信号阈值：注入不足时不判定（样本太小）
+        if recent_injected < 10:
+            r.passed = True
+            r.severity = "info"
+            r.message = f"Only {recent_injected} injections in 7d — too few to judge apply signal"
+        elif applied_chunks > 0:
+            r.passed = True
+            r.message = f"Apply signal alive: {applied_chunks} chunks with apply_count>0 ({recent_injected} injections/7d)"
+            r.actual = {"applied_chunks": applied_chunks, "injected_7d": recent_injected}
+        else:
+            # 死链复发：注入充足却零应用
+            r.passed = False
+            r.severity = "critical"
+            r.message = (f"DEAD LINK: {recent_injected} injections/7d but 0 chunks ever applied. "
+                         f"apply_count 采集链可能又断了——检查 suppress_unused 是否在 Stop hook fallback 路径执行")
+            r.actual = {"applied_chunks": 0, "injected_7d": recent_injected}
+            r.expected = {"applied_chunks": ">0"}
+
+    except Exception as e:
+        r.passed = False
+        r.severity = "warn"
+        r.message = f"Error: {e}"
+
+    r.duration_ms = (time.time() - t0) * 1000
+    return r
+
+
 def assert_extractor_writes_chunks(conn: sqlite3.Connection, fix: bool = False) -> AssertionResult:
     """
     断言：提取器在最近 7 天内至少写入过一个 chunk。
@@ -974,6 +1023,7 @@ ALL_ASSERTIONS = [
     assert_retriever_injects_knowledge,
     assert_extractor_writes_chunks,
     assert_fts5_covers_all_chunks,
+    assert_apply_signal_alive,
     # Assumption audits
     audit_latency_baseline,
     audit_retrieval_diversity,

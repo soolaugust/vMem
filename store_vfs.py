@@ -90,6 +90,12 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         )
     """)
     _safe_add_column(conn, "memory_chunks", "access_count", "INTEGER DEFAULT 0")
+    # ROI 信号：apply_count — chunk 被「实际应用」次数（区别于 access_count 仅记「被召回」）。
+    # 由 Stop hook 文本重叠检测回填（extractor_pool._measure_application）。召回≠应用。
+    _safe_add_column(conn, "memory_chunks", "apply_count", "INTEGER DEFAULT 0")
+    # last_applied — 上次「真实应用」时间戳。冷度判断据此（被用过）而非 last_accessed
+    # （仅被召回）。由 suppress_unused 对称回写（2026-06-05 修复 apply_count 死链）。
+    _safe_add_column(conn, "memory_chunks", "last_applied", "TEXT")
     # 迭代38：oom_adj — per-chunk 淘汰优先级（-1000 绝对保护 ↔ +1000 优先淘汰）
     _safe_add_column(conn, "memory_chunks", "oom_adj", "INTEGER DEFAULT 0")
     # 迭代44：lru_gen — MGLRU 多代追踪（0=youngest, max_gen=oldest）
@@ -183,6 +189,9 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     # recall_traces 反馈列
     _safe_add_column(conn, "recall_traces", "user_feedback", "TEXT")
     _safe_add_column(conn, "recall_traces", "feedback_ts", "TEXT")
+    # ROI 信号：applied_ids_json — 本次召回中哪些 chunk 在模型输出里被实际应用（JSON id 数组）。
+    # NULL = 尚未测量（幂等守卫：仅对 NULL trace 计一次 apply_count）。
+    _safe_add_column(conn, "recall_traces", "applied_ids_json", "TEXT")
 
     # ── 迭代104：chunk_pins — 项目级 pin（OS 类比：VMA per-process mlock）──
     # 同一 chunk 在不同 project 中有独立的 pin 状态：
@@ -8561,6 +8570,7 @@ def suppress_unused(
 
     now_iso = datetime.now(timezone.utc).isoformat()
     suppressed = 0
+    applied = 0  # 对称：被引用的注入 chunk 数（apply_count 已 +1）
     for row in rows:
         cid, summary, importance = row[0], row[1] or "", row[2] or 0.5
 
@@ -8588,6 +8598,28 @@ def suppress_unused(
                     suppressed += 1
                 except Exception:
                     pass
+        else:
+            # 对称信号：注入且在回复中被引用（overlap≥阈值）→ apply_count +1。
+            # 根因（2026-06-05）：apply_count 采集链此前是死链——_measure_application 只在
+            # 不常驻的 extractor_pool daemon 路径里，同步 fallback 从不度量，导致库内 44 条
+            # 全 0。此处复用 suppress_unused 已算出的 overlap，零额外计算补回 ROI 地面真值。
+            try:
+                conn.execute(
+                    "UPDATE memory_chunks "
+                    "SET apply_count=COALESCE(apply_count,0)+1, last_applied=? WHERE id=?",
+                    (now_iso, cid),
+                )
+                applied += 1
+            except Exception:
+                pass
+
+    # 暴露 apply 信号（存活探针数据源）：applied>0 证明 ROI 采集链活着。
+    if applied:
+        try:
+            dmesg_log(conn, DMESG_INFO, "apply_signal",
+                      f"reward_applied: {applied} injected chunks referenced (apply_count +1)")
+        except Exception:
+            pass
 
     return suppressed
 
@@ -14825,7 +14857,8 @@ def apply_reward_tagged_memory_consolidation(
 
     try:
         rows = conn.execute(
-            """SELECT id, stability, access_count, last_accessed, importance
+            """SELECT id, stability, access_count, last_accessed, importance,
+                      COALESCE(apply_count, 0)
                FROM memory_chunks
                WHERE project = ?
                  AND COALESCE(access_count, 0) >= ?
@@ -14843,6 +14876,19 @@ def apply_reward_tagged_memory_consolidation(
     total_examined = len(rows)
     rtmc_boosted = 0
     log_ref = _math_rtmc.log(1 + rtmc_acc_ref)  # precompute denominator
+
+    # ROI 修正预热守卫：apply_count 信号上线初期数据不足时，apply_ratio 普遍=0 会把所有
+    # chunk 的 reward 错误压到 floor。仅当本项目已积累足够「已测量」trace 时才启用修正。
+    _RTMC_APPLY_FLOOR = 0.3        # 召回多但没人用的 chunk 仍保留 30% 巩固（不归零，避免硬悬崖）
+    _RTMC_WARMUP_MIN_TRACES = 20   # 已测量 trace 阈值
+    try:
+        _measured = conn.execute(
+            "SELECT COUNT(*) FROM recall_traces WHERE project=? AND applied_ids_json IS NOT NULL",
+            (project,),
+        ).fetchone()[0]
+    except Exception:
+        _measured = 0
+    _apply_correction_on = _measured >= _RTMC_WARMUP_MIN_TRACES
 
     for row in rows:
         try:
@@ -14876,6 +14922,13 @@ def apply_reward_tagged_memory_consolidation(
 
             # 奖励信号：对数归一化访问次数（acc=rtmc_acc_ref 时 reward_signal=1.0）
             reward_signal = min(1.0, _math_rtmc.log(1 + acc_f) / log_ref)
+
+            # ROI 修正：召回≠应用。被召回多但从未被实际用上的 chunk 不应被错误巩固。
+            # apply_ratio = apply_count/access_count ∈ [0,1]；全应用→不变，零应用→floor(0.3)。
+            if _apply_correction_on:
+                apc = row[5] if isinstance(row, (list, tuple)) else row["apply_count"]
+                apply_ratio = min(1.0, float(apc or 0) / acc_f) if acc_f > 0 else 0.0
+                reward_signal *= (_RTMC_APPLY_FLOOR + (1.0 - _RTMC_APPLY_FLOOR) * apply_ratio)
 
             # 近期因子：访问越新鲜，recency_factor 越接近 1.0
             recency_factor = max(0.0, 1.0 - hours_since / rtmc_recency_hours)
