@@ -38,6 +38,7 @@ memory-os = "mcp_memory_lookup:main"
 packages = ["."]
 only-include = [
     "mcp_memory_lookup.py",
+    "vmem_doctor.py",
     "store_vfs.py",
     "store_vfs_schema.py",
     "store_vfs_effects_new.py",
@@ -46,4 +47,10 @@ only-include = [
     "config.py",
     "utils.py",
     "schema.py",
+    "hooks/hooks.json",
+    "hooks/context_governor.py",
+    "hooks/prompt_budget_guard.py",
+    "hooks/retriever.py",
+    "hooks/retriever_daemon.py",
+    "hooks/retriever_wrapper.sh",
 ]
