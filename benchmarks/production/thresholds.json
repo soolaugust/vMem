@@ -1,0 +1,15 @@
+{
+  "min_score_release": 85,
+  "max_guard_latency_ms": 200,
+  "max_doctor_latency_ms": 1000,
+  "max_install_repair_latency_ms": 1000,
+  "required_gates": [
+    "doctor_passes",
+    "install_repair_idempotent",
+    "context_hard_overflow_no_block",
+    "critical_pressure_sheds_retriever",
+    "fault_no_db_degrades",
+    "package_metadata_ok",
+    "public_hygiene_passes"
+  ]
+}

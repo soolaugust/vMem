@@ -28,8 +28,12 @@ jobs:
           python -m pytest \
             tests/test_vmem_doctor.py \
             tests/test_context_400_e2e.py \
+            tests/test_production_benchmark.py \
             hooks/test_context_governor.py \
             hooks/test_prompt_budget_guard.py -q
+      - name: Production benchmark smoke
+        run: |
+          python benchmarks/production/runner.py --suite smoke --fail-under 85 --report /tmp/vmem-benchmark.json --markdown /tmp/vmem-benchmark.md
       - name: Doctor smoke
         run: |
           MEMORY_OS_DIR=$(mktemp -d) python mcp_memory_lookup.py doctor --json
