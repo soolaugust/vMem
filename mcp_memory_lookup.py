@@ -862,9 +862,9 @@ async def _run_stdio_compat() -> None:
 
 
 def main():
-    if len(sys.argv) > 1 and sys.argv[1] == "doctor":
+    if len(sys.argv) > 1 and sys.argv[1] in {"doctor", "install", "repair"}:
         from vmem_doctor import main as doctor_main
-        raise SystemExit(doctor_main(sys.argv[2:]))
+        raise SystemExit(doctor_main(sys.argv[1:]))
     anyio.run(_run_stdio_compat)
 
 

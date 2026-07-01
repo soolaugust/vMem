@@ -101,6 +101,105 @@ def check_internal_strings() -> tuple[bool, str]:
     return True, "no public internal-string hits"
 
 
+def default_settings_path() -> Path:
+    return Path(os.environ.get("CLAUDE_SETTINGS_PATH", Path.home() / ".claude" / "settings.json")).expanduser()
+
+
+def _plugin_root_placeholder() -> str:
+    return "${CLAUDE_PLUGIN_ROOT}"
+
+
+def desired_user_prompt_entry() -> dict[str, Any]:
+    root = _plugin_root_placeholder()
+    return {
+        "matcher": "*",
+        "hooks": [
+            {
+                "type": "command",
+                "command": f"python3 \"{root}/hooks/prompt_budget_guard.py\"",
+                "timeout": 3,
+                "async": False,
+            }
+        ],
+    }
+
+
+def _is_prompt_guard_command(command: Any) -> bool:
+    return isinstance(command, str) and "prompt_budget_guard.py" in command
+
+
+def repair_settings(settings_path: Path, write: bool = True) -> dict[str, Any]:
+    if settings_path.exists():
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        if not isinstance(settings, dict):
+            raise ValueError("settings root must be an object")
+    else:
+        settings = {}
+
+    hooks = settings.setdefault("hooks", {})
+    if not isinstance(hooks, dict):
+        raise ValueError("settings.hooks must be an object")
+    entries = hooks.setdefault("UserPromptSubmit", [])
+    if not isinstance(entries, list):
+        raise ValueError("settings.hooks.UserPromptSubmit must be a list")
+
+    desired = desired_user_prompt_entry()
+    changed = False
+    kept: list[Any] = []
+    removed_duplicates = 0
+    found = False
+    for entry in entries:
+        if not isinstance(entry, dict):
+            kept.append(entry)
+            continue
+        entry_hooks = entry.get("hooks", [])
+        has_guard = isinstance(entry_hooks, list) and any(
+            isinstance(hook, dict) and _is_prompt_guard_command(hook.get("command"))
+            for hook in entry_hooks
+        )
+        if not has_guard:
+            kept.append(entry)
+            continue
+        if found:
+            removed_duplicates += 1
+            changed = True
+            continue
+        found = True
+        if entry != desired:
+            changed = True
+        kept.append(desired)
+
+    if not found:
+        kept.insert(0, desired)
+        changed = True
+    else:
+        guard_index = next(
+            index for index, entry in enumerate(kept)
+            if isinstance(entry, dict) and any(
+                isinstance(hook, dict) and _is_prompt_guard_command(hook.get("command"))
+                for hook in entry.get("hooks", [])
+            )
+        )
+        if guard_index != 0:
+            guard_entry = kept.pop(guard_index)
+            kept.insert(0, guard_entry)
+            changed = True
+
+    hooks["UserPromptSubmit"] = kept
+    if write and changed:
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    return {
+        "ok": True,
+        "changed": changed,
+        "settings_path": str(settings_path),
+        "guard_index": 0,
+        "duplicates_removed": removed_duplicates,
+        "command": desired["hooks"][0]["command"],
+    }
+
+
 def run_checks() -> list[dict[str, Any]]:
     checks = [
         ("required_files", check_required_files),
@@ -119,18 +218,44 @@ def run_checks() -> list[dict[str, Any]]:
     return results
 
 
+def _emit_result(payload: dict[str, Any], json_output: bool) -> None:
+    if json_output:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        if "checks" in payload:
+            for item in payload["checks"]:
+                icon = "✅" if item["ok"] else "❌"
+                print(f"{icon} {item['name']}: {item['message']}")
+        else:
+            icon = "✅" if payload.get("ok") else "❌"
+            action = payload.get("action", "repair")
+            changed = "changed" if payload.get("changed") else "already ok"
+            print(f"{icon} {action}: {changed} ({payload.get('settings_path')})")
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Check vMem production readiness")
-    parser.add_argument("--json", action="store_true", help="emit JSON")
+    parser = argparse.ArgumentParser(description="Check and repair vMem production readiness")
+    sub = parser.add_subparsers(dest="command")
+    doctor = sub.add_parser("doctor", help="run readiness checks")
+    doctor.add_argument("--json", action="store_true", help="emit JSON")
+    for name in ("install", "repair"):
+        cmd = sub.add_parser(name, help=f"{name} Claude Code hook settings")
+        cmd.add_argument("--settings", type=Path, default=default_settings_path())
+        cmd.add_argument("--json", action="store_true", help="emit JSON")
+        cmd.add_argument("--check", action="store_true", help="dry-run without writing")
+    parser.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+
+    if args.command in {"install", "repair"}:
+        payload = repair_settings(args.settings.expanduser(), write=not args.check)
+        payload["action"] = args.command
+        _emit_result(payload, args.json)
+        return 0 if payload["ok"] else 1
+
     results = run_checks()
     ok = all(item["ok"] for item in results)
-    if args.json:
-        print(json.dumps({"ok": ok, "checks": results}, ensure_ascii=False, indent=2))
-    else:
-        for item in results:
-            icon = "✅" if item["ok"] else "❌"
-            print(f"{icon} {item['name']}: {item['message']}")
+    payload = {"ok": ok, "checks": results}
+    _emit_result(payload, bool(getattr(args, "json", False)))
     return 0 if ok else 1
 
 
