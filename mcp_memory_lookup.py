@@ -35,14 +35,20 @@ OS 类比：
 """
 
 import sys
+import asyncio
 import os
 import json
 import sqlite3
+from contextlib import asynccontextmanager
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
+import anyio
 
 # FastMCP — Model Context Protocol Python SDK
+from mcp import types
 from mcp.server.fastmcp import FastMCP
+from mcp.shared.message import SessionMessage
 
 # ── AIOS memory-os 路径 ───────────────────────────────────────────────────────
 _MOS_ROOT = Path(__file__).resolve().parent
@@ -52,6 +58,7 @@ if str(_MOS_ROOT) not in sys.path:
 from store_vfs import fts_search, open_db, pin_chunk, unpin_chunk, is_pinned, get_pinned_chunks, ensure_schema
 from scorer import retrieval_score, recency_score
 from utils import resolve_project_id
+from config import get as _sysctl
 
 # ── MCP Server 初始化 ────────────────────────────────────────────────────────
 mcp = FastMCP(
@@ -106,7 +113,9 @@ def _format_chunk(chunk: dict, rank: int) -> str:
 
     # 语义层来源标记
     semantic_tag = " [跨项目语义记忆]" if chunk.get("_from_semantic_layer") else ""
-    lines = [f"{icon} [{rank}] [{chunk_type}]{semantic_tag} (importance={importance:.2f})"]
+    chunk_id = chunk.get("id", "")
+    id_tag = f" id={chunk_id}" if chunk_id else ""
+    lines = [f"{icon} [{rank}] [{chunk_type}]{semantic_tag} (importance={importance:.2f}){id_tag}"]
     lines.append(f"  {summary}")
     if content and len(content) < 500:
         lines.append(f"  ---")
@@ -144,6 +153,13 @@ def memory_lookup(
     """
     if not query or not query.strip():
         return "❌ 查询为空，请提供检索关键词。"
+
+    max_top_k = int(_sysctl("mcp.memory_lookup_top_k_max"))
+    try:
+        top_k = max(1, min(int(top_k), max_top_k))
+    except (TypeError, ValueError):
+        return "❌ top_k 必须是整数。"
+    response_budget = int(_sysctl("mcp.memory_lookup_max_response_chars"))
 
     # 推断项目 ID
     if not project:
@@ -210,27 +226,50 @@ def memory_lookup(
 
         top_results = scored[:top_k]
 
-        # ── 格式化输出 ────────────────────────────────────────────────────────
-        lines = [f"🔍 memory_lookup: '{query}' → {len(top_results)} 条结果\n"]
+        # ── 格式化输出（RSS budget aware）────────────────────────────────────────
+        query_label = query[:160] + ("…" if len(query) > 160 else "")
+        lines = []
+        used_chars = 0
+        budget_exhausted = False
+
+        def _append_budgeted(text: str) -> bool:
+            nonlocal used_chars, budget_exhausted
+            projected = used_chars + len(text) + 1
+            if projected > response_budget:
+                budget_exhausted = True
+                return False
+            lines.append(text)
+            used_chars = projected
+            return True
+
+        _append_budgeted(f"🔍 memory_lookup: '{query_label}' → {len(top_results)} 条结果\n")
 
         # 分离约束和普通知识（类比 retriever 的强制注入逻辑）
         constraints = [(s, c) for s, c in top_results if c.get("chunk_type") == "design_constraint"]
         others = [(s, c) for s, c in top_results if c.get("chunk_type") != "design_constraint"]
 
         if constraints:
-            lines.append("【已知约束（系统级设计限制）】")
+            _append_budgeted("【已知约束（系统级设计限制）】")
             for i, (score, c) in enumerate(constraints, 1):
-                lines.append(_format_chunk(c, i))
-                lines.append(f"  (score={score:.3f})")
-            lines.append("")
+                if not _append_budgeted(_format_chunk(c, i)):
+                    break
+                if not _append_budgeted(f"  (score={score:.3f})"):
+                    break
+            _append_budgeted("")
 
-        if others:
-            lines.append("【相关知识】")
+        if others and not budget_exhausted:
+            _append_budgeted("【相关知识】")
             offset = len(constraints)
             for i, (score, c) in enumerate(others, 1):
-                lines.append(_format_chunk(c, offset + i))
-                lines.append(f"  (score={score:.3f})")
-                lines.append("")
+                if not _append_budgeted(_format_chunk(c, offset + i)):
+                    break
+                if not _append_budgeted(f"  (score={score:.3f})"):
+                    break
+                if not _append_budgeted(""):
+                    break
+
+        if budget_exhausted:
+            _append_budgeted("… context budget reached; refine query or request a specific ref/chunk for more details.")
 
         return "\n".join(lines)
 
@@ -476,6 +515,90 @@ def list_pinned(
 
 
 @mcp.tool()
+def memory_write(
+    summary: str,
+    content: str,
+    chunk_type: str = "design_constraint",
+    project: str | None = None,
+    tags: list[str] | None = None,
+    importance: float = 0.9,
+) -> str:
+    """
+    将新知识直接写入 memory-os（知识真相源），避免只落到文件 memory。
+
+    Args:
+        summary: 一句话摘要，用于检索结果标题
+        content: 详细内容，写入前应已去重并确认不是代码/仓库已记录事实
+        chunk_type: 知识类型，如 design_constraint / decision / reference / quantitative_evidence
+        project: 项目 ID（默认自动解析当前目录）
+        tags: 可选标签
+        importance: 重要性 0.0-1.0，默认 0.9
+
+    Returns:
+        写入结果和 chunk_id
+    """
+    if not summary or not summary.strip():
+        return "❌ summary 为空。"
+    if not content or not content.strip():
+        return "❌ content 为空。"
+    if not project:
+        try:
+            project = resolve_project_id()
+        except Exception:
+            project = "default"
+    try:
+        importance_f = max(0.0, min(float(importance), 1.0))
+    except (TypeError, ValueError):
+        return "❌ importance 必须是数字。"
+
+    allowed_types = {
+        "design_constraint", "decision", "reference", "quantitative_evidence",
+        "reasoning_chain", "semantic_memory", "project", "feedback", "user",
+    }
+    if chunk_type not in allowed_types:
+        return f"❌ chunk_type 不支持：{chunk_type}"
+
+    try:
+        conn = _open_readwrite()
+    except FileNotFoundError as e:
+        return f"❌ 知识库未初始化：{e}"
+
+    try:
+        import hashlib
+        import json as _json
+        cid_src = f"{project}\n{chunk_type}\n{summary.strip()}\n{content.strip()}"
+        cid = "manual:" + hashlib.sha256(cid_src.encode("utf-8")).hexdigest()[:24]
+        now_iso = datetime.now(timezone.utc).isoformat()
+        tags_json = _json.dumps(tags or ["manual", "memory_write"], ensure_ascii=False)
+        conn.execute(
+            """INSERT OR REPLACE INTO memory_chunks
+               (id, created_at, updated_at, project, source_session, chunk_type,
+                content, summary, tags, importance, retrievability, last_accessed,
+                source_type, source_reliability, chunk_state, access_count, apply_count)
+               VALUES (?, COALESCE((SELECT created_at FROM memory_chunks WHERE id=?), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE',
+                       COALESCE((SELECT access_count FROM memory_chunks WHERE id=?), 0),
+                       COALESCE((SELECT apply_count FROM memory_chunks WHERE id=?), 0))""",
+            (
+                cid, cid, now_iso, now_iso, project, "memory_write", chunk_type,
+                content.strip(), summary.strip(), tags_json, importance_f, 0.9,
+                now_iso, "manual", 0.95, cid, cid,
+            ),
+        )
+        rowid = conn.execute("SELECT rowid FROM memory_chunks WHERE id=?", (cid,)).fetchone()[0]
+        conn.execute("DELETE FROM memory_chunks_fts WHERE rowid_ref=?", (str(rowid),))
+        conn.execute(
+            "INSERT INTO memory_chunks_fts(rowid_ref, summary, content) VALUES (?, ?, ?)",
+            (str(rowid), summary.strip(), content.strip()),
+        )
+        conn.commit()
+        return f"✅ memory_write: 写入 {chunk_type} chunk\n  id={cid}\n  project={project}"
+    except Exception as e:
+        return f"❌ memory_write 失败：{type(e).__name__}: {e}"
+    finally:
+        conn.close()
+
+
+@mcp.tool()
 def memory_applied(
     chunk_ids: list[str],
     project: str | None = None,
@@ -543,10 +666,206 @@ def memory_applied(
         conn.close()
 
 
+@mcp.tool()
+def memory_hook_health(
+    hours: int = 24,
+    project: str | None = None,
+) -> str:
+    """
+    Hook 系统健康检查 — 查看最近 N 小时内哪些 hook 在触发、哪些静默失败。
+    OS 类比：dmesg + journalctl — 查看内核子系统日志。
+
+    返回：
+      1. hook_txn_log：各 hook 的成功/失败次数、平均耗时
+      2. dmesg：最近的系统日志（WARN/ERROR 级别）
+      3. assertion_history：存活断言通过率
+
+    Args:
+        hours: 查看最近 N 小时的日志（默认 24）
+        project: 筛选项目（空=全部）
+    """
+    if not project:
+        try:
+            project = resolve_project_id()
+        except Exception:
+            project = None
+
+    try:
+        conn = _open_readonly()
+    except FileNotFoundError as e:
+        return f"❌ 知识库未初始化：{e}"
+
+    try:
+        lines = []
+
+        # ── 1. hook_txn_log ──
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        where = "WHERE committed_at >= ?"
+        params = [cutoff]
+        if project:
+            where += " AND project = ?"
+            params.append(project)
+
+        rows = conn.execute(
+            f"SELECT hook, status, COUNT(*), AVG(chunk_count) "
+            f"FROM hook_txn_log {where} GROUP BY hook, status ORDER BY COUNT(*) DESC",
+            params,
+        ).fetchall()
+
+        lines.append(f"🪝 Hook 执行统计（最近 {hours}h）")
+        if rows:
+            for hook, status, cnt, avg_chunks in rows:
+                icon = "✅" if status in ("ok", "committed") else "❌"
+                chunks_str = f", avg {avg_chunks:.0f} chunks" if avg_chunks else ""
+                lines.append(f"  {icon} {hook}: {status} × {cnt}{chunks_str}")
+        else:
+            lines.append("  (无记录)")
+
+        # ── 2. dmesg WARN/ERROR ──
+        dmesg_rows = conn.execute(
+            "SELECT timestamp, level, subsystem, message FROM dmesg "
+            "WHERE timestamp >= ? AND level IN ('WARN', 'ERROR', 'CRIT') "
+            "ORDER BY timestamp DESC LIMIT 10",
+            [cutoff],
+        ).fetchall()
+
+        lines.append(f"\n📋 最近日志（WARN/ERROR，最近 {hours}h）")
+        if dmesg_rows:
+            for ts, level, subsystem, msg in dmesg_rows:
+                icon = "⚠️" if level == "WARN" else "🔴"
+                lines.append(f"  {icon} [{ts[:16]}] [{subsystem}] {msg[:100]}")
+        else:
+            lines.append("  (无告警)")
+
+        # ── 3. assertion 存活率 ──
+        assertion_rows = conn.execute(
+            "SELECT assertion_name, "
+            "SUM(CASE WHEN passed THEN 1 ELSE 0 END) as pass_cnt, "
+            "COUNT(*) as total "
+            "FROM assertion_history WHERE ts >= ? "
+            "GROUP BY assertion_name ORDER BY total DESC LIMIT 10",
+            [cutoff],
+        ).fetchall()
+
+        lines.append(f"\n🛡️ 存活断言通过率（最近 {hours}h）")
+        if assertion_rows:
+            for name, pass_cnt, total in assertion_rows:
+                rate = pass_cnt / total * 100 if total else 0
+                icon = "✅" if rate >= 90 else "⚠️" if rate >= 50 else "❌"
+                lines.append(f"  {icon} {name}: {pass_cnt}/{total} ({rate:.0f}%)")
+        else:
+            lines.append("  (无记录)")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        return f"❌ hook 健康检查失败：{type(e).__name__}: {e}"
+    finally:
+        conn.close()
+
+
 # ── 入口 ────────────────────────────────────────────────────────────────────
 
+@asynccontextmanager
+async def _stdio_server_compat():
+    """stdio transport compatible with Codex and long-lived open stdin pipes.
+
+    The installed MCP SDK's stdio helper wraps ``sys.stdin`` with AnyIO's async
+    file iterator. In this environment that iterator does not yield a line until
+    stdin closes, so Codex-style clients hang at ``initialize`` because they keep
+    the pipe open. This local transport keeps the normal MCP newline-JSON format
+    but reads stdin via asyncio fd readiness and writes flushed newline JSON.
+    """
+    read_stream_writer, read_stream = anyio.create_memory_object_stream(0)
+    write_stream, write_stream_reader = anyio.create_memory_object_stream(0)
+
+    async def stdin_reader():
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+        fd = sys.stdin.fileno()
+        buffer = bytearray()
+
+        def on_stdin_ready() -> None:
+            try:
+                data = os.read(fd, 4096)
+            except BlockingIOError:
+                return
+            except OSError:
+                data = b""
+            if data:
+                queue.put_nowait(data)
+            else:
+                try:
+                    loop.remove_reader(fd)
+                except Exception:
+                    pass
+                queue.put_nowait(None)
+
+        loop.add_reader(fd, on_stdin_ready)
+        try:
+            async with read_stream_writer:
+                while True:
+                    data = await queue.get()
+                    if data is None:
+                        break
+                    buffer.extend(data)
+                    while True:
+                        newline = buffer.find(b"\n")
+                        if newline < 0:
+                            break
+                        raw_line = bytes(buffer[: newline + 1])
+                        del buffer[: newline + 1]
+                        line = raw_line.decode("utf-8", errors="replace")
+                        try:
+                            message = types.JSONRPCMessage.model_validate_json(line)
+                        except Exception as exc:
+                            await read_stream_writer.send(exc)
+                            continue
+                        await read_stream_writer.send(SessionMessage(message))
+        except anyio.ClosedResourceError:
+            await anyio.lowlevel.checkpoint()
+        finally:
+            try:
+                loop.remove_reader(fd)
+            except Exception:
+                pass
+
+    def _write_stdout(payload: str) -> None:
+        sys.stdout.write(payload)
+        sys.stdout.flush()
+
+    async def stdout_writer():
+        try:
+            async with write_stream_reader:
+                async for session_message in write_stream_reader:
+                    payload = session_message.message.model_dump_json(
+                        by_alias=True,
+                        exclude_none=True,
+                    )
+                    _write_stdout(payload + "\n")
+        except anyio.ClosedResourceError:
+            await anyio.lowlevel.checkpoint()
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(stdin_reader)
+        tg.start_soon(stdout_writer)
+        yield read_stream, write_stream
+
+
+async def _run_stdio_compat() -> None:
+    async with _stdio_server_compat() as (read_stream, write_stream):
+        await mcp._mcp_server.run(
+            read_stream,
+            write_stream,
+            mcp._mcp_server.create_initialization_options(),
+        )
+
+
 def main():
-    mcp.run(transport="stdio")
+    if len(sys.argv) > 1 and sys.argv[1] == "doctor":
+        from vmem_doctor import main as doctor_main
+        raise SystemExit(doctor_main(sys.argv[2:]))
+    anyio.run(_run_stdio_compat)
 
 
 if __name__ == "__main__":

@@ -73,6 +73,49 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 from config import get as _sysctl  # ~3ms, 模块级函数依赖
 from config import sched_ext_match as _sched_ext_match  # 迭代47: sched_ext
+from context_governor import should_shed_optional_context
+
+# 注入防御 defanging（借鉴 komi-learn）：注入前清洗 chunk 文本，中和 prompt injection
+try:
+    from hooks.defang import defang as _defang
+except ImportError:
+    try:
+        from defang import defang as _defang
+    except ImportError:
+        def _defang(text):  # 兜底：模块缺失时不阻断检索
+            return text or ""
+
+
+def _format_context_with_offload(inject_lines, top_k, max_chars):
+    """Apply VM-style context offload under resident-set pressure."""
+    context_text = "\n".join(inject_lines)
+    if not _sysctl("retriever.context_offload_enabled"):
+        return (context_text[:max_chars] + "…") if len(context_text) > max_chars else context_text
+
+    some_at = int(max_chars * float(_sysctl("retriever.offload_some_ratio")))
+    full_at = int(max_chars * float(_sysctl("retriever.offload_full_ratio")))
+    if len(context_text) <= some_at:
+        return context_text
+
+    chunks = []
+    for _score, chunk in top_k:
+        c = dict(chunk)
+        c.setdefault("raw_snippet", c.get("content", ""))
+        c["summary"] = _defang(c.get("summary", ""))
+        c["raw_snippet"] = _defang(c.get("raw_snippet", ""))
+        chunks.append(c)
+
+    try:
+        from context_offload import format_chunks
+        pressure = "full" if len(context_text) > full_at else "some"
+        offloaded = format_chunks(chunks, pressure=pressure, max_chars=max_chars)
+        if offloaded:
+            header = "【相关知识（context offload）】"
+            return f"{header}\n{offloaded}"
+    except Exception:
+        pass
+
+    return context_text[:max_chars] + "…"
 
 # ── 迭代61：vDSO Fast Path — Lazy Import ──────────────────────────────────────
 # OS 类比：Linux vDSO (Virtual Dynamic Shared Object, 2004)
@@ -418,6 +461,13 @@ def _vdso_fast_exit() -> bool:
     # 旧格式用 "prompt" 字段（兼容保留）
     _hsi = hook_input.get("hookSpecificInput", {})
     prompt = (_hsi.get("userMessage", "") or hook_input.get("prompt", "") or "").strip()
+
+    # ── Context pressure shedding ─────────────────────────────────────────
+    # UserPromptSubmit already ran context-pressure-guard before retriever.
+    # Under high/critical pressure, skip memory additionalContext injection so
+    # recovery commands remain usable and request assembly has less to carry.
+    if should_shed_optional_context(hook_input):
+        sys.exit(0)
 
     # ── Stage 0：SKIP 快速判断（零 I/O，<1ms）──
     # 条件：prompt 匹配 SKIP 模式 + 无技术信号 + 无未消费的缺页日志
@@ -2694,6 +2744,9 @@ def main():
                 current_project=project,
                 query_alpha=_dyn_alpha,
                 chunk_type=chunk.get("chunk_type", ""),  # iter375: type-differential decay
+                confidence_score=chunk.get("confidence_score", 0.7) or 0.7,
+                verification_status=chunk.get("verification_status", "pending") or "pending",
+                apply_count=chunk.get("apply_count", 0) or 0,  # 质量驱动跨项目降权（ROI 项）
             )
             # ── iter1782: recall_frequency_decay — 高频注入已内化 chunk 平滑衰减 ──
             # 数据驱动（2026-05-14）：27-chunk 库中 top5 chunk 占 58 次注入的 48%，
@@ -5921,10 +5974,10 @@ def main():
                     hard_deadline_forced = False
                     for s, c in top_k:
                         prefix = _TYPE_PREFIX.get(c.get("chunk_type", ""), "")
-                        line = f"- {prefix} {c['summary']}".strip()
+                        line = f"- {prefix} {_defang(c['summary'])}".strip()
                         rs = _hd_raw.get(c["id"], "")
                         if rs:
-                            line = f"{line}（原文：{rs[:150]}）"
+                            line = f"{line}（原文：{_defang(rs[:150])}）"
                         if c.get("chunk_type") == "design_constraint":
                             # 在 hard_deadline 路径中，约束都是被强制注入的（因为评分可能不高）
                             constraint_items.append(line)
@@ -5947,9 +6000,7 @@ def main():
                     else:
                         inject_lines.extend(normal_items)
 
-                    context_text = "\n".join(inject_lines)
-                    if len(context_text) > effective_max_chars:
-                        context_text = context_text[:effective_max_chars] + "…"
+                    context_text = _format_context_with_offload(inject_lines, top_k, effective_max_chars)
                     # iter1590: post_filter_hash — hash 基于实际注入的 top_k
                     _pf_ids_hd = sorted([c["id"] for _, c in top_k])
                     _pf_hash_hd = hashlib.md5("|".join(_pf_ids_hd).encode()).hexdigest()[:8] if _pf_ids_hd else f"wipeout_{int(_time.time())}"
@@ -10575,13 +10626,13 @@ def main():
                 _sum_limit = 100   # 中等：适度截断
             else:
                 _sum_limit = 60    # 低 importance：大幅截断，减少噪声
-            _summary_truncated = c['summary'][:_sum_limit]
+            _summary_truncated = _defang(c['summary'][:_sum_limit])
             line = f"{conf}{prefix} {_summary_truncated}".strip()
             # 迭代306：importance >= 0.75 且有 raw_snippet → 附加原文（≤150字）
             # 迭代361：已 FULL 注入过的 chunk 降级为 LITE（跳过 raw_snippet，节省 ~30-80 tokens）
             rs = _raw_snippets.get(c["id"], "")
             if rs and c["id"] not in _session_full_injected:
-                rs_short = rs[:150]
+                rs_short = _defang(rs[:150])
                 line = f"{line}（原文：{rs_short}）"
             if c.get("chunk_type") == "design_constraint":
                 constraint_items.append(line)
@@ -10778,9 +10829,7 @@ def main():
         except Exception:
             pass  # second-chance 失败不阻塞
 
-        context_text = "\n".join(inject_lines)
-        if len(context_text) > effective_max_chars:
-            context_text = context_text[:effective_max_chars] + "…"
+        context_text = _format_context_with_offload(inject_lines, top_k, effective_max_chars)
 
         reason_base = "first_call" if not _read_hash() else "hash_changed"
         reason = f"{reason_base}|{priority.lower()}"  # 迭代28：trace 中记录调度优先级

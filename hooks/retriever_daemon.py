@@ -1009,6 +1009,7 @@ import time
 import signal
 import zlib
 import io as _io  # iter215: module-level import — avoid per-request 'import io' in _handle_connection (~0.2us)
+from context_governor import should_shed_optional_context
 
 # ── 路径设置 ──
 _DAEMON_FILE = os.path.abspath(__file__)
@@ -2515,6 +2516,14 @@ def _run_retrieval(hook_input: dict):
     if not prompt:
         return
 
+    # ── Context pressure shedding ─────────────────────────────────────────
+    # prompt_budget_guard runs before retriever_wrapper.sh in UserPromptSubmit.
+    # Under high/critical pressure the daemon must shed optional memory
+    # additionalContext just like retriever.py fallback, otherwise the common
+    # daemon path can still push request assembly over the model context window.
+    if should_shed_optional_context(hook_input):
+        return
+
     # ── Stage 0: SKIP ──
     # iter189: has_page_fault_file 计算一次，传给 Stage2（消除 _retriever_main_impl 第二次 exists）
     # iter259: 改为 glob 检查，支持 per-session 文件 page_fault_log*.json
@@ -3787,6 +3796,14 @@ def _retriever_main_impl(hook_input: dict, mods: dict,
             # OS 类比：register allocation — eliminating an intermediate temp avoids an extra
             #          STORE/LOAD pair (stack push+pop), keeping values in Python's eval stack.
             score = relevance * (eff_imp * 0.55 + rec * 0.45 + ab + fb) - sp + vb + lgb - ndp  # iter255: drop -vp (always 0)
+            # 质量驱动信任传递（与 scorer.quality_cross_proj_factor 同源）：跨 project chunk
+            # 按知识质量额外降权。iter255 曾因 disputed 长期=0 drop 掉 vp，现 A 让 disputed 有数据→恢复。
+            # daemon tuple 无 apply_count 列，ROI 项仅在主路径 retrieval_score 生效；此处做 disputed+低confidence。
+            if _cp and _cp != project:
+                if _vs == "disputed":
+                    score *= 0.4
+                elif (_cs or 0.7) < 0.5:
+                    score *= 0.6
             if _run_aslr and _cid and _ac < _sc_al_thr:  # iter252: no else-branch (eb=0 implicit)
                 _h = hash((_cid, query)) & 0x7fffffff
                 score += _sc_al_eps * (1.0 - _ac / _sc_al_thr) * ((_h % 10000) / 10000.0)

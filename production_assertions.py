@@ -22,10 +22,13 @@ OS 类比：Linux KASAN/UBSAN + kunit + kselftest — 运行时正确性验证 +
   python3 production_assertions.py --fix        # 自动修复可修复项
 """
 
+import importlib.util
 import json
 import os
 import sqlite3
+import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -72,6 +75,20 @@ class AssertionResult:
             d["fix_applied"] = True
             d["fix_description"] = self.fix_description
         return d
+
+
+# ── Schema helpers ───────────────────────────────────────────────────────────
+
+
+def _table_count(conn: sqlite3.Connection, table: str) -> int:
+    try:
+        return conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+    except sqlite3.OperationalError:
+        return 0
+
+
+def _empty_minimal_schema(conn: sqlite3.Connection) -> bool:
+    return _table_count(conn, "memory_chunks") == 0 and _table_count(conn, "recall_traces") == 0
 
 
 # ── Pipeline Assertions（管道端到端非空） ──────────────────────────────────────
@@ -241,6 +258,20 @@ def assert_apply_signal_alive(conn: sqlite3.Connection, fix: bool = False) -> As
             r.actual = {"applied_chunks": 0, "injected_7d": recent_injected}
             r.expected = {"applied_chunks": ">0"}
 
+    except sqlite3.OperationalError as e:
+        if "no such column: apply_count" in str(e) and _empty_minimal_schema(conn):
+            r.passed = True
+            r.severity = "info"
+            r.message = "apply_count column absent in empty/minimal schema — skip apply signal assertion"
+        elif "no such column: apply_count" in str(e):
+            r.passed = False
+            r.severity = "critical"
+            r.message = "apply_count column absent in non-empty DB — schema migration required"
+            r.expected = {"column": "memory_chunks.apply_count"}
+        else:
+            r.passed = False
+            r.severity = "warn"
+            r.message = f"Error: {e}"
     except Exception as e:
         r.passed = False
         r.severity = "warn"
@@ -549,6 +580,74 @@ def audit_retrieval_diversity(conn: sqlite3.Connection, fix: bool = False) -> As
         r.passed = False
         r.message = f"Error: {e}"
 
+    r.duration_ms = (time.time() - t0) * 1000
+    return r
+
+
+def assert_memory_md_synced(conn: sqlite3.Connection, fix: bool = False) -> AssertionResult:
+    """
+    断言：全局 project file memory 不能成为 memory-os 旁路孤岛。
+
+    兼容期允许 ~/.claude/projects/*/memory/*.md 存在，但必须同步进 memory_chunks
+    且 source_type='memory-md'。否则 /clear 后只能靠文件注入，memory_lookup 召不回。
+    """
+    r = AssertionResult("memory_md_synced", "pipeline")
+    t0 = time.time()
+    try:
+        projects_root = Path.home() / ".claude" / "projects"
+        files = [p for p in projects_root.glob("*/memory/*.md") if p.name != "MEMORY.md"] if projects_root.exists() else []
+        if not files:
+            r.passed = True
+            r.message = "No project file memories"
+            r.duration_ms = (time.time() - t0) * 1000
+            return r
+        synced = conn.execute(
+            """SELECT COUNT(*) FROM memory_chunks
+               WHERE source_type='memory-md' AND chunk_state='ACTIVE'"""
+        ).fetchone()[0]
+        if synced >= len(files):
+            r.passed = True
+            r.message = f"memory-md synced globally: {synced}/{len(files)}"
+        elif fix:
+            import subprocess, sys
+            script = Path(__file__).resolve().parent / "tools" / "sync_project_memory_md.py"
+            proc = subprocess.run(
+                [sys.executable, str(script), str(projects_root), "--project", "global"],
+                text=True, capture_output=True, check=False,
+            )
+            if proc.returncode == 0:
+                r.passed = True
+                r.fix_applied = True
+                r.fix_description = "Synced all project memory-md files into memory-os global project"
+                r.message = r.fix_description
+            else:
+                r.passed = False
+                r.severity = "warn"
+                r.message = f"sync failed: {proc.stderr[-500:] or proc.stdout[-500:]}"
+        else:
+            r.passed = False
+            r.severity = "warn"
+            r.message = f"memory-md not fully synced globally: {synced}/{len(files)}"
+            r.actual = {"synced": synced, "files": len(files)}
+            r.expected = {"synced": ">= files"}
+    except sqlite3.OperationalError as e:
+        if "no such column: source_type" in str(e) and _empty_minimal_schema(conn):
+            r.passed = True
+            r.severity = "info"
+            r.message = "source_type column absent in empty/minimal schema — skip memory-md sync assertion"
+        elif "no such column: source_type" in str(e):
+            r.passed = False
+            r.severity = "critical"
+            r.message = "source_type column absent in non-empty DB — memory-md sync schema migration required"
+            r.expected = {"column": "memory_chunks.source_type"}
+        else:
+            r.passed = False
+            r.severity = "warn"
+            r.message = f"Error: {e}"
+    except Exception as e:
+        r.passed = False
+        r.severity = "warn"
+        r.message = f"Error: {e}"
     r.duration_ms = (time.time() - t0) * 1000
     return r
 
@@ -1015,15 +1114,148 @@ def audit_empty_recall_rate(conn: sqlite3.Connection, fix: bool = False) -> Asse
     return r
 
 
+def assert_prompt_budget_guard_hard_pressure(conn: sqlite3.Connection, fix: bool = False) -> AssertionResult:
+    """断言：projected context 超 hard budget 时 UserPromptSubmit 产生可观测 WARN。
+
+    2026-06 当前策略不在 hook 层硬阻断用户输入；hook 负责在请求组装前
+    写入 pressure state 并返回 approve+WARN，真正降载/阻断应发生在请求组装层。
+    """
+    r = AssertionResult("prompt_budget_guard_hard_pressure", "pipeline")
+    t0 = time.time()
+    script = Path(__file__).resolve().parent / "hooks" / "prompt_budget_guard.py"
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            transcript = tmp_path / "transcript.jsonl"
+            transcript.write_text(
+                json.dumps({"message": {"content": [{"type": "text", "text": "t" * 500}]}}) + "\n",
+                encoding="utf-8",
+            )
+            env = os.environ.copy()
+            env.update({
+                "MEMORY_OS_PROMPT_CHAR_BUDGET": "1000",
+                "MEMORY_OS_TOTAL_CONTEXT_HARD_CHARS": "200",
+                "MEMORY_OS_TOTAL_CONTEXT_WARN_CHARS": "100",
+                "MEMORY_OS_STATIC_CONTEXT_RESERVE_CHARS": "100",
+                "MEMORY_OS_DOWNSTREAM_CONTEXT_RESERVE_CHARS": "1",
+                "HARNESS_HEARTBEAT_DIR": str(tmp_path),
+            })
+            result = subprocess.run(
+                [sys.executable, str(script)],
+                input=json.dumps({"prompt": "ok", "transcript_path": str(transcript)}),
+                text=True,
+                capture_output=True,
+                env=env,
+                check=False,
+                timeout=5,
+            )
+
+        if result.returncode == 0:
+            payload = json.loads(result.stdout or "{}")
+            reason = payload.get("reason", "")
+            if payload.get("decision") == "approve" and "CRITICAL" in reason and "hard budget" in reason and "critical pressure" in reason:
+                r.passed = True
+                r.message = "projected context hard budget returns approve+critical pressure before retrieval injection"
+                r.actual = {"returncode": result.returncode, "decision": payload.get("decision")}
+            else:
+                r.passed = False
+                r.severity = "critical"
+                r.message = "guard exited 0 but did not emit hard-budget critical pressure payload"
+                r.actual = {"stdout": result.stdout[:300], "stderr": result.stderr[:300]}
+                r.expected = {"decision": "approve", "reason": "CRITICAL hard budget"}
+        else:
+            r.passed = False
+            r.severity = "critical"
+            r.message = f"hard-budget guard returned unexpected nonzero status (returncode={result.returncode})"
+            r.actual = {"returncode": result.returncode, "stdout": result.stdout[:300], "stderr": result.stderr[:300]}
+            r.expected = {"returncode": 0, "decision": "approve", "reason": "CRITICAL hard budget"}
+    except Exception as e:
+        r.passed = False
+        r.severity = "warn"
+        r.message = f"Error: {e}"
+
+    r.duration_ms = (time.time() - t0) * 1000
+    return r
+
+
+def assert_vmem_doctor_passes(conn: sqlite3.Connection, fix: bool = False) -> AssertionResult:
+    """断言：vMem doctor 覆盖 hook 顺序、依赖文件、pressure 消费和公开卫生。"""
+    r = AssertionResult("vmem_doctor_passes", "hygiene")
+    t0 = time.time()
+    try:
+        from vmem_doctor import run_checks
+        checks = run_checks()
+        failures = [item for item in checks if not item.get("ok")]
+        if failures:
+            r.passed = False
+            r.severity = "critical"
+            r.message = f"vmem doctor found {len(failures)} failure(s)"
+            r.actual = failures
+            r.expected = "all doctor checks pass"
+        else:
+            r.passed = True
+            r.message = f"vmem doctor passed {len(checks)} checks"
+            r.actual = {item["name"]: item["message"] for item in checks}
+    except Exception as e:
+        r.passed = False
+        r.severity = "warn"
+        r.message = f"Error: {e}"
+    r.duration_ms = (time.time() - t0) * 1000
+    return r
+
+
+def assert_prompt_budget_guard_settings(conn: sqlite3.Connection, fix: bool = False) -> AssertionResult:
+    """断言：~/.claude/settings.json 中 prompt_budget_guard 是同步 UserPromptSubmit block hook。"""
+    r = AssertionResult("prompt_budget_guard_settings", "assumption")
+    t0 = time.time()
+    settings_path = Path(os.environ.get("CLAUDE_SETTINGS_PATH", "~/.claude/settings.json")).expanduser()
+    reconcile_path = Path(__file__).resolve().parent / "hooks" / "prompt_budget_settings_reconcile.py"
+
+    try:
+        spec = importlib.util.spec_from_file_location("prompt_budget_settings_reconcile", reconcile_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError("cannot load prompt_budget_settings_reconcile")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        result = module.reconcile_settings(settings_path, write=fix)
+        changed = bool(result.get("changed"))
+        if changed and not fix:
+            r.passed = False
+            r.severity = "critical"
+            r.message = "prompt_budget_guard settings drift detected; run production_assertions.py --fix"
+            r.actual = result
+            r.expected = {"changed": False, "guard_index": 0, "async": False}
+        else:
+            r.passed = True
+            r.message = "prompt_budget_guard wired first in UserPromptSubmit as synchronous block hook"
+            if changed and fix:
+                r.fix_applied = True
+                r.fix_description = "Reconciled prompt_budget_guard UserPromptSubmit hook"
+                r.message = r.fix_description
+            r.actual = result
+    except Exception as e:
+        r.passed = False
+        r.severity = "warn"
+        r.message = f"Error: {e}"
+
+    r.duration_ms = (time.time() - t0) * 1000
+    return r
+
+
 # ── 运行器 ────────────────────────────────────────────────────────────────────
 
 ALL_ASSERTIONS = [
     # Pipeline
+    assert_prompt_budget_guard_hard_pressure,
     assert_swap_out_produces_output,
     assert_retriever_injects_knowledge,
     assert_extractor_writes_chunks,
     assert_fts5_covers_all_chunks,
     assert_apply_signal_alive,
+    assert_memory_md_synced,
+    assert_prompt_budget_guard_settings,
+    assert_vmem_doctor_passes,
     # Assumption audits
     audit_latency_baseline,
     audit_retrieval_diversity,
@@ -1044,7 +1276,20 @@ def run_all(fix: bool = False) -> dict:
     t0 = time.time()
 
     if not STORE_DB.exists():
-        return {"error": "store.db not found", "results": []}
+        return {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "status": "DEGRADED",
+            "summary": {
+                "total": 0,
+                "passed": 0,
+                "failed": 0,
+                "critical": 0,
+                "warnings": 1,
+                "duration_ms": 0,
+            },
+            "error": "store.db not found",
+            "results": [],
+        }
 
     conn = sqlite3.connect(str(STORE_DB), timeout=5)
     conn.execute("PRAGMA journal_mode=WAL")
