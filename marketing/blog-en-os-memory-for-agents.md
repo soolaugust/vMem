@@ -1,8 +1,8 @@
 ---
-title: "Why your AI agents need OS-style memory management (and not another vector DB)"
-description: "Most LLM memory libraries are vector stores in disguise. The mental model that actually scales — for one agent, and especially for many — is the operating-system memory subsystem. Here's the case for it, and an open-source implementation."
+title: "Why your AI agents need OS-style context management (and not another vector DB)"
+description: "Most LLM context libraries are vector stores in disguise. The mental model that actually scales — for one agent, and especially for many — is the operating-system memory subsystem. Here's the case for it, and an open-source implementation."
 tags: ["ai", "llm", "agents", "memory"]
-canonical_url: "https://github.com/soolaugust/0CompactMem"
+canonical_url: "https://github.com/soolaugust/vMem"
 published: false
 ---
 
@@ -23,14 +23,14 @@ LLM agents are *new* consumers of an *old* problem. We should not invent a new
 abstraction. We should reuse the one that has been battle-tested for decades.
 
 This post argues for that, then walks through how
-[0CompactMem](https://github.com/soolaugust/0CompactMem) — an open-source memory
+[vMem](https://github.com/soolaugust/vMem) — an open-source memory
 layer — implements the OS analogy concretely.
 
 ---
 
 ## The problem with "memory = store"
 
-Open any popular LLM memory library and you will see roughly the same shape:
+Open any popular LLM context library and you will see roughly the same shape:
 
 ```python
 mem.add(user_id, "the user prefers concise replies")
@@ -72,7 +72,7 @@ Look at how Linux manages RAM:
 | Async I/O off the critical path      | kworker thread pools                     |
 | Multiple processes, one substrate    | Process scheduler + cgroups              |
 
-Every one of these has a direct counterpart in agent memory:
+Every one of these has a direct counterpart in agent context:
 
 | Agent concern                               | OS analogue                  |
 |---------------------------------------------|------------------------------|
@@ -87,7 +87,7 @@ Every one of these has a direct counterpart in agent memory:
 
 The point is not that this is a clever metaphor. The point is that **the
 problems are isomorphic**, so the solutions transfer. You don't have to invent
-a new eviction policy for agent memory; you can adapt the kswapd watermark
+a new eviction policy for agent context; you can adapt the kswapd watermark
 algorithm and reason about it the same way kernel engineers have for years.
 
 ---
@@ -103,7 +103,7 @@ In a vector-store memory:
 - A month later it scores low on similarity for the current query, gets
   evicted by TTL or LRU, and the agent re-mocks the database.
 
-In an OS-style memory:
+In an OS-style context:
 - You write the lesson, then `pin_memory(chunk_id, kind="hard")`.
 - `mlock`-equivalent semantics mean *no eviction path can touch this chunk*.
   Not LRU. Not kswapd. Not DAMON. Not stale-reclaim.
@@ -128,7 +128,7 @@ up automatically. No syncing protocol, no cache coherence headaches — because
 the underlying store is the single source of truth, exactly like a shared
 filesystem.
 
-This is what `0CompactMem` does in practice. It is a single SQLite file. Any
+This is what `vMem` does in practice. It is a single SQLite file. Any
 process that opens it joins the same memory namespace.
 
 ---
@@ -151,9 +151,9 @@ absolutely do.
 
 ---
 
-## What 0CompactMem actually implements
+## What vMem actually implements
 
-[0CompactMem](https://github.com/soolaugust/0CompactMem) (formerly `memory-os`)
+[vMem](https://github.com/soolaugust/vMem) (formerly `vMem`)
 is a small Python project that wires the OS analogy concretely:
 
 - **Storage**: SQLite (WAL mode), single file, single source of truth.
@@ -181,15 +181,15 @@ exactly what eviction tuning looks like in real kernels too.
 
 ## When this is the wrong tool
 
-Be honest about what OS-style memory is *not*:
+Be honest about what OS-style context is *not*:
 
 - **Not a managed cloud service.** If you want a SaaS to call from anywhere,
   use mem0 cloud or Zep cloud.
 - **Not a full agent runtime.** If you want LangGraph/Letta-style agents
-  with built-in tool loops, 0CompactMem is just the memory layer; pair it
+  with built-in tool loops, vMem is just the context management layer; pair it
   with your runtime of choice.
 - **Not a planet-scale vector DB.** If you have 100M+ chunks, use a real
-  vector DB. 0CompactMem targets the laptop / single-server regime.
+  vector DB. vMem targets the laptop / single-server regime.
 
 ---
 
@@ -197,19 +197,19 @@ Be honest about what OS-style memory is *not*:
 
 ```bash
 # In Claude Code
-/install-plugin github:soolaugust/0CompactMem
+/install-plugin github:soolaugust/vMem
 ```
 
 ```bash
 # Or manually
-git clone https://github.com/soolaugust/0CompactMem
-cd 0CompactMem
+git clone https://github.com/soolaugust/vMem
+cd vMem
 pip install -e .
 python init/bootstrap.py
 ```
 
 The README walks through the rest. The
-[`llms.txt`](https://github.com/soolaugust/0CompactMem/blob/main/llms.txt) at
+[`llms.txt`](https://github.com/soolaugust/vMem/blob/main/llms.txt) at
 the repo root is a deliberately compact summary if you want to feed it to
 your own model first.
 
@@ -217,11 +217,11 @@ your own model first.
 
 ## The broader bet
 
-Agent memory will be a real infrastructure layer in 2026, the way databases
+Agent context will be a real infrastructure layer in 2026, the way databases
 were in the 90s and message queues were in the 2010s. The teams who build
 that layer well will steal ideas from operating systems, not from search
 engines. Demand paging > "top-K similar." Pinning > TTL. Watermarks >
 unbounded growth.
 
-If that resonates, [come read the code](https://github.com/soolaugust/0CompactMem)
+If that resonates, [come read the code](https://github.com/soolaugust/vMem)
 or open an issue. The interesting work is just starting.

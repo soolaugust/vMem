@@ -3,7 +3,7 @@ MEMORY OS SWAP RECOVERY BENCHMARK REPORT
 执行时间: 2026-04-19
 ================================================================================
 
-目标: 量化 Memory OS 中 PreCompact (swap_out) + PostCompact (swap_in) 机制实际
+目标: 量化 vMem 中 PreCompact (swap_out) + PostCompact (swap_in) 机制实际
      保留的关键上下文信息
 
 核心发现

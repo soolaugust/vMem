@@ -12,12 +12,12 @@ ready-to-paste line, and a 1-2 line PR description.
 - Entry:
 
 ```markdown
-- [0CompactMem](https://github.com/soolaugust/0CompactMem) — OS-inspired persistent memory for LLM agents. Demand paging, multi-agent shared knowledge, MCP-native, single-file SQLite deploy.
+- [vMem](https://github.com/soolaugust/vMem) — OS-inspired persistent context for LLM agents. Demand paging, multi-agent shared knowledge, MCP-native, single-file SQLite deploy.
 ```
 
-- PR title: `Add 0CompactMem to AI Memory section`
+- PR title: `Add vMem to AI Memory section`
 - PR body:
-  > Adding 0CompactMem — a memory layer for LLM agents that borrows OS memory-management primitives (demand paging, kswapd eviction, mlock pinning) instead of inventing new ones. SQLite-backed, MCP-native, multi-agent shared store. MIT licensed, 3,500+ tests.
+  > Adding vMem — a context management layer for LLM agents that borrows OS context-management primitives (demand paging, kswapd eviction, mlock pinning) instead of inventing new ones. SQLite-backed, MCP-native, multi-agent shared store. MIT licensed, 3,500+ tests.
 
 ---
 
@@ -28,12 +28,12 @@ ready-to-paste line, and a 1-2 line PR description.
 - Entry:
 
 ```markdown
-- [0CompactMem](https://github.com/soolaugust/0CompactMem) — Persistent, multi-agent shared memory layer modeled on OS memory subsystems (demand paging, eviction watermarks, pin/mlock). MCP-native; runs as a single SQLite file.
+- [vMem](https://github.com/soolaugust/vMem) — Persistent, multi-agent shared context management layer modeled on OS memory subsystems (demand paging, eviction watermarks, pin/mlock). MCP-native; runs as a single SQLite file.
 ```
 
-- PR title: `Add 0CompactMem (memory layer)`
+- PR title: `Add vMem (context management layer)`
 - PR body:
-  > 0CompactMem provides a kernel-grade memory layer for LLM agents. Unlike vector-store memory libraries, it explicitly models RAM/disk/paging/eviction with operating-system semantics, which makes multi-agent coordination and pinning predictable. MCP-native; single-file SQLite deploy. MIT.
+  > vMem provides a kernel-grade context management layer for LLM agents. Unlike vector-store memory libraries, it explicitly models RAM/disk/paging/eviction with operating-system semantics, which makes multi-agent coordination and pinning predictable. MCP-native; single-file SQLite deploy. MIT.
 
 ---
 
@@ -46,12 +46,12 @@ ready-to-paste line, and a 1-2 line PR description.
 - Entry:
 
 ```markdown
-- [0CompactMem](https://github.com/soolaugust/0CompactMem) — Persistent memory MCP server for Claude Code. Remembers decisions, constraints, and context across sessions; shareable between multiple Claude Code instances. One-line install: `/install-plugin github:soolaugust/0CompactMem`.
+- [vMem](https://github.com/soolaugust/vMem) — Persistent context MCP server for Claude Code. Remembers decisions, constraints, and context across sessions; shareable between multiple Claude Code instances. One-line install: `/install-plugin github:soolaugust/vMem`.
 ```
 
-- PR title: `Add 0CompactMem memory MCP server`
+- PR title: `Add vMem memory MCP server`
 - PR body:
-  > 0CompactMem is a Claude-Code-native persistent memory MCP server. It models memory as an OS subsystem (demand paging, eviction, pinning) and lets multiple Claude Code sessions share the same knowledge base. Installable in one line via `/install-plugin`. MIT.
+  > vMem is a Claude-Code-native persistent context MCP server. It models memory as an OS subsystem (demand paging, eviction, pinning) and lets multiple Claude Code sessions share the same knowledge base. Installable in one line via `/install-plugin`. MIT.
 
 ---
 
@@ -65,12 +65,12 @@ ready-to-paste line, and a 1-2 line PR description.
 - Entry:
 
 ```markdown
-- [0CompactMem](https://github.com/soolaugust/0CompactMem) 🐍 - Persistent memory MCP server with OS-style demand paging, kswapd-style eviction, and pin/mlock semantics. Multi-agent shared SQLite store.
+- [vMem](https://github.com/soolaugust/vMem) 🐍 - Persistent context MCP server with OS-style demand paging, kswapd-style eviction, and pin/mlock semantics. Multi-agent shared SQLite store.
 ```
 
-- PR title: `Add 0CompactMem to Memory section`
+- PR title: `Add vMem to Memory section`
 - PR body:
-  > Submitting 0CompactMem: a memory MCP server that exposes `memory_lookup`, `pin_memory`, `unpin_memory`, `memory_stats`, `list_pinned`. Designed as an OS memory subsystem (RAM/disk/paging analogy), runs as a single SQLite file, supports multi-agent shared knowledge.
+  > Submitting vMem: a memory MCP server that exposes `memory_lookup`, `pin_memory`, `unpin_memory`, `memory_stats`, `list_pinned`. Designed as an OS memory subsystem (RAM/disk/paging analogy), runs as a single SQLite file, supports multi-agent shared knowledge.
 
 ---
 
@@ -83,12 +83,12 @@ ready-to-paste line, and a 1-2 line PR description.
 - Entry:
 
 ```markdown
-- [0CompactMem](https://github.com/soolaugust/0CompactMem) — Persistent memory layer that doubles as a lightweight RAG store for agents. BM25 + semantic recall, demand-paging retrieval, pinnable chunks, single-file SQLite deploy.
+- [vMem](https://github.com/soolaugust/vMem) — Persistent context layer that doubles as a lightweight RAG store for agents. BM25 + semantic recall, demand-paging retrieval, pinnable chunks, single-file SQLite deploy.
 ```
 
-- PR title: `Add 0CompactMem as a memory + RAG store`
+- PR title: `Add vMem as a memory + RAG store`
 - PR body:
-  > 0CompactMem can be used as a small, embeddable RAG store for AI agents: BM25 + semantic scoring, on-demand retrieval, eviction, pinning. Where it differs from typical vector DBs is that it explicitly models the OS memory hierarchy (RAM/disk/paging) for agent cognition. MIT.
+  > vMem can be used as a small, embeddable RAG store for AI agents: BM25 + semantic scoring, on-demand retrieval, eviction, pinning. Where it differs from typical vector DBs is that it explicitly models the OS memory hierarchy (RAM/disk/paging) for agent cognition. MIT.
 
 ---
 

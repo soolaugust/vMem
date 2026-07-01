@@ -1,10 +1,10 @@
 {
   "$schema": "https://glama.ai/schemas/glama.json",
   "maintainers": ["soolaugust"],
-  "title": "0CompactMem",
-  "description": "Persistent memory MCP server with full OS memory semantics: demand paging, kswapd-style eviction, mlock pinning, DAMON access tracking, CRIU checkpoint/restore, and multi-agent WAL sharing. Single SQLite file, zero external dependencies.",
+  "title": "vMem",
+  "description": "Persistent context MCP server with full OS context-management semantics: demand paging, kswapd-style eviction, mlock pinning, DAMON access tracking, CRIU checkpoint/restore, and multi-agent WAL sharing. Single SQLite file, zero external dependencies.",
   "tags": ["memory", "persistence", "mcp", "sqlite", "eviction", "pinning", "multi-agent", "claude-code", "demand-paging", "bm25"],
-  "repository": "https://github.com/soolaugust/0CompactMem",
+  "repository": "https://github.com/soolaugust/vMem",
   "license": "MIT",
   "categories": ["knowledge-memory"],
   "language": "Python",

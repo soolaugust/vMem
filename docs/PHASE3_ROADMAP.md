@@ -13,7 +13,7 @@
 
 ```
 ┌─────────────────────────────────────────────┐
-│     Agent Team (memory-os hooks)            │
+│     Agent Team (vMem hooks)            │
 │  - extractor (high priority)                │
 │  - retriever (normal priority)              │
 │  - eval (low priority)                      │

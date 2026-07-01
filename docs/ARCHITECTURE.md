@@ -1,4 +1,4 @@
-# AIOS Memory OS — 架构设计说明
+# AIOS vMem — 架构设计说明
 
 > 最后更新：迭代258（2026-04）
 > 核心理念：用操作系统内核的设计哲学解决 AI Agent 的认知资源管理问题
@@ -392,7 +392,7 @@ tool_insight (0.75)      ← Bash 工具输出中的量化结论
 - **检索延迟**：P50 ~0.1ms / P95 ~0.14ms（vs subprocess 基线 ~54ms，540× 改善）
 - **_score_chunk**：1.74us/10 chunks（iter238 基线 11.4us，-84.7%；iter239-258 累计改善）
 - **检索质量**：BM25 vs 纯重要性排序 Recall@3 +147%（58.3% vs 23.6%），MRR +320%
-- **A/B 测试**：memory-os 辅助 vs 无记忆：8/12 胜，平均得分 3.55 vs 2.12（+68%）
+- **A/B 测试**：vMem 辅助 vs 无记忆：8/12 胜，平均得分 3.55 vs 2.12（+68%）
 - **Session Recall@3**：94.2%
 - **检索命中率**：61.9% chunks 被检索命中（最高单 chunk ×2043 次）
 - **活跃 hook 数**：~20 个（SessionStart 4 + UserPromptSubmit 5 + PreToolUse 5 + PostToolUse 7 + Stop 2）

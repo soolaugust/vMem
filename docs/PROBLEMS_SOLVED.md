@@ -1,8 +1,8 @@
-# Problems 0CompactMem solves
+# Problems vMem solves
 
 > Concrete pain points users hit with LLM agents, what we changed, and the
 > measured impact. Mainly useful for prospective contributors and people
-> evaluating whether 0CompactMem covers their case.
+> evaluating whether vMem covers their case.
 
 Each section names a specific problem and the iteration that resolved it.
 You can `git log --grep="iter N"` for the actual change.

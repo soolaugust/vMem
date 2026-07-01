@@ -6,12 +6,12 @@ Submission link: https://www.producthunt.com/posts/new
 
 Primary:
 
-> Zero context compaction for Claude Code & LLM agents
+> OS-managed context for Claude Code & LLM agents
 
 Backups:
 
-> Your AI never forgets — persistent memory that survives compaction
-> End "context compacted" forever. OS-grade memory for AI.
+> Your AI never forgets — persistent context that survives compaction
+> End "context compacted" forever. OS-grade context management for AI.
 
 ## Topics (pick up to 4)
 
@@ -22,8 +22,8 @@ Backups:
 
 ## Description (260 chars max)
 
-> 0CompactMem eliminates context compaction in Claude Code. Persistent memory
-> that survives window resets — powered by OS memory-management primitives
+> vMem eliminates context compaction in Claude Code. Persistent context
+> that survives window resets — powered by OS context-management primitives
 > (demand paging, kswapd eviction, mlock pinning). Single SQLite file,
 > MCP-native, multi-agent shared. MIT.
 
@@ -35,10 +35,10 @@ Backups:
 > accumulated decisions, constraints, architectural knowledge — wiped. You
 > re-explain. The model re-learns. Multiply by every agent you run.
 >
-> **The fix**: 0CompactMem gives your AI persistent memory that lives *outside*
+> **The fix**: vMem gives your AI persistent context that lives *outside*
 > the context window. When compaction hits, nothing critical is lost.
 >
-> How it achieves "zero compaction":
+> How it achieves "OS-managed context":
 >
 > - **Demand paging** — `memory_lookup` fetches exactly what's relevant, on demand
 > - **mlock pinning** — pin a constraint, it's *guaranteed* to survive every reclaim
@@ -49,7 +49,7 @@ Backups:
 >
 > One-line install in Claude Code:
 >
->     /install-plugin github:soolaugust/0CompactMem
+>     /install-plugin github:soolaugust/vMem
 >
 > Or pip install + bootstrap (README has the steps).
 >
@@ -57,9 +57,9 @@ Backups:
 > planet-scale vector DB. It's the memory *layer* that makes compaction
 > invisible.
 >
-> Repo: https://github.com/soolaugust/0CompactMem
+> Repo: https://github.com/soolaugust/vMem
 >
-> Happy to dig into the zero-compact guarantee, OS analogy, or multi-agent
+> Happy to dig into the OS-managed context guarantee, OS analogy, or multi-agent
 > coherence model. Roast away.
 
 ## Hunter
@@ -68,14 +68,14 @@ If possible, find a hunter active in AI/dev-tools. If self-hunting, fine.
 
 ## Visuals checklist
 
-- [ ] **Logo** — 240x240 PNG (the "0" in 0CompactMem prominently featured)
+- [ ] **Logo** — 240x240 PNG (the "0" in vMem prominently featured)
 - [ ] **Gallery image 1** — hero shot: "Before vs After" — compaction pain
       vs smooth memory restoration
 - [ ] **Gallery image 2** — animated GIF / screenshot of `memory_lookup`
       returning results after a compaction event
-- [ ] **Gallery image 3** — diagram: OS concept -> 0CompactMem primitive
+- [ ] **Gallery image 3** — diagram: OS concept -> vMem primitive
 - [ ] **Optional video** — 30-60s screen recording showing: (1) context compacts,
-      (2) new session starts, (3) 0CompactMem restores full context instantly
+      (2) new session starts, (3) vMem restores full context instantly
 
 ## Launch-day timing
 

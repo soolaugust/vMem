@@ -20,11 +20,11 @@
 \pgfplotsset{compat=1.18}
 \usetikzlibrary{positioning,arrows.meta,fit,backgrounds,patterns}
 
-\title{\textbf{0CompactMem: Systematic OS Abstractions for LLM Agent Memory\\with Verifiable Pin Guarantees}}
+\title{\textbf{vMem: Systematic OS Abstractions for LLM Context\\with Verifiable Pin Guarantees}}
 
 \author{
   Zhidao Su \\
-  Xiaomi Inc. \\
+  Independent Researcher \\
   \texttt{soolaugust@gmail.com}
 }
 
@@ -34,11 +34,11 @@
 \maketitle
 
 \begin{abstract}
-Persistent memory for LLM agents has adopted eviction policies from OS memory management, but existing systems map at most one or two kernel primitives---leaving critical guarantees unaddressed. We present \textbf{0CompactMem}, an agent memory layer that systematically maps seven OS memory subsystems (demand paging, kswapd, DAMON, mlock, CRIU, kworker, shared memory) to agent-memory operations. Our key technical contribution is \emph{pin semantics}: hard/soft memory locking that provably guarantees constraint survival under arbitrary eviction pressure---a property no existing system provides.
+Persistent memory for LLM agents has adopted eviction policies from OS memory management, but existing systems map at most one or two kernel primitives---leaving critical guarantees unaddressed. We present \textbf{vMem}, an agent memory layer that systematically maps seven OS memory subsystems (demand paging, kswapd, DAMON, mlock, CRIU, kworker, shared memory) to agent-memory operations. Our key technical contribution is \emph{pin semantics}: hard/soft memory locking that provably guarantees constraint survival under arbitrary eviction pressure---a property no existing system provides.
 
 We evaluate on the LongMemEval benchmark (500 questions across 6 question types), achieving 92.6\% retrieval session recall with sub-millisecond latency (0.09ms p50) and zero external dependencies. Under 4$\times$ memory pressure, pinned constraints achieve 100\% physical survival (82\% lexically retrievable), while systems without pins retain 0\%. Quantitative ablation on LongMemEval confirms each OS primitive contributes a distinct, irreplaceable guarantee: removing any single primitive causes binary loss of a system property.
 
-The system is deployed as an open-source Claude Code plugin (MIT) with 10{,}700+ test assertions, demonstrating that production-grade agent memory requires only a single SQLite file and principled application of OS abstractions. Code and benchmarks: \url{https://github.com/soolaugust/0CompactMem}.
+The system is deployed as an open-source Claude Code plugin (MIT) with 10{,}700+ test assertions, demonstrating that production-grade agent memory requires only a single SQLite file and principled application of OS abstractions. Code and benchmarks: \url{https://github.com/soolaugust/vMem}.
 \end{abstract}
 
 %% ============================================================
@@ -77,7 +77,7 @@ Long-running LLM agents accumulate knowledge across sessions: architectural deci
 \node[font=\tiny] at (7.0, 1.85) {constraint gone};
 
 % === Bottom: With Pin Semantics ===
-\node[anchor=west, font=\footnotesize\bfseries] at (0, 1.1) {(b) With pin semantics (0CompactMem)};
+\node[anchor=west, font=\footnotesize\bfseries] at (0, 1.1) {(b) With pin semantics (vMem)};
 \draw[timeline] (0,0.4) -- (9.5,0.4) node[right, font=\tiny] {time};
 
 \node[event] (p1) at (1.0, 0.8) {Store + \textbf{pin}};
@@ -94,7 +94,7 @@ Long-running LLM agents accumulate knowledge across sessions: architectural deci
 
 \end{tikzpicture}%
 }% end resizebox
-\caption{The pin-guarantee problem. (a)~Existing systems evict constraints under memory pressure, causing agents to re-violate established rules. (b)~0CompactMem's \texttt{mlock}-inspired pin semantics guarantee constraint survival regardless of pressure.}
+\caption{The pin-guarantee problem. (a)~Existing systems evict constraints under memory pressure, causing agents to re-violate established rules. (b)~vMem's \texttt{mlock}-inspired pin semantics guarantee constraint survival regardless of pressure.}
 \label{fig:motivation}
 \end{figure}
 
@@ -143,7 +143,7 @@ For readers from the AI/ML community, we briefly review the OS primitives we map
 
 \subsection{The Gap: Single-Primitive Systems}
 
-Table~\ref{tab:coverage} summarizes which OS primitives each system implements. No prior system covers more than two; 0CompactMem covers all seven.
+Table~\ref{tab:coverage} summarizes which OS primitives each system implements. No prior system covers more than two; vMem covers all seven.
 
 \begin{table}[t]
 \centering
@@ -160,7 +160,7 @@ Letta~\cite{memgpt2023}    & $\sim$ & ---  & ---  & ---  & ---  & ---  & --- \\
 AMV-L~\cite{amvl2026}      & ---  & \checkmark & $\sim$ & ---  & ---  & ---  & --- \\
 HTM-EAR~\cite{htmear2026}  & ---  & \checkmark & \checkmark & ---  & ---  & ---  & --- \\
 \midrule
-\textbf{0CompactMem} & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\
+\textbf{vMem} & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -239,7 +239,7 @@ HTM-EAR~\cite{htmear2026}  & ---  & \checkmark & \checkmark & ---  & ---  & --- 
 \draw[darrow, gray] (ret.north) -- ++(0, 0.4) -| node[note, above, pos=0.25] {access\_count++} (db.south west);
 
 \end{tikzpicture}
-\caption{0CompactMem architecture as a data-flow diagram. Chunks flow through write (blue), retrieval (green), eviction (red), and checkpoint (purple) paths. Pin state (orange) blocks eviction; WAL mode enables concurrent multi-agent access (yellow). OS primitive analogs annotated.}
+\caption{vMem architecture as a data-flow diagram. Chunks flow through write (blue), retrieval (green), eviction (red), and checkpoint (purple) paths. Pin state (orange) blocks eviction; WAL mode enables concurrent multi-agent access (yellow). OS primitive analogs annotated.}
 \label{fig:arch}
 \end{figure*}
 
@@ -261,12 +261,12 @@ Table~\ref{tab:mapping} presents the full OS$\to$agent-memory mapping.
 
 \begin{table*}[t]
 \centering
-\caption{Complete OS $\to$ 0CompactMem primitive mapping.}
+\caption{Complete OS $\to$ vMem primitive mapping.}
 \label{tab:mapping}
 \footnotesize
 \begin{tabular}{lp{4.2cm}p{4.8cm}p{3cm}}
 \toprule
-\textbf{OS Primitive} & \textbf{OS Semantics} & \textbf{0CompactMem Mapping} & \textbf{Impl.} \\
+\textbf{OS Primitive} & \textbf{OS Semantics} & \textbf{vMem Mapping} & \textbf{Impl.} \\
 \midrule
 Demand paging & Load page only on fault & \texttt{memory\_lookup}: retrieve on knowledge gap & MCP tool; BM25+FTS5 \\
 \addlinespace
@@ -289,7 +289,7 @@ shmem & Shared physical pages & Multiple agents open same SQLite & WAL mode \\
 
 \subsection{Demand Paging: On-Demand Retrieval}
 
-Traditional agent memory systems pre-load a fixed top-$K$ context at session start (analogous to loading all possible pages at process creation). 0CompactMem instead implements \emph{demand paging}: the agent's reasoning is the ``process,'' and a knowledge gap triggers a ``page fault''---a call to \texttt{memory\_lookup(query)}.
+Traditional agent memory systems pre-load a fixed top-$K$ context at session start (analogous to loading all possible pages at process creation). vMem instead implements \emph{demand paging}: the agent's reasoning is the ``process,'' and a knowledge gap triggers a ``page fault''---a call to \texttt{memory\_lookup(query)}.
 
 This yields two advantages: (1) retrieval queries are \emph{specific} to the current reasoning context, producing higher precision than broad initial retrievals; and (2) multi-round retrieval is natural (discovering fact A leads to querying for related fact B).
 
@@ -329,7 +329,7 @@ This two-level semantics is inspired by Linux's \texttt{mlock()} (absolute guara
 
 \subsection{CRIU: Session Checkpoint/Restore}
 
-At session end (Stop hook), 0CompactMem snapshots the current working set---recently accessed chunks, active project context, and session metadata---into a checkpoint file. At next SessionStart, this checkpoint is used to ``warm start'' the session, restoring the agent to approximately its prior cognitive state without requiring full re-retrieval.
+At session end (Stop hook), vMem snapshots the current working set---recently accessed chunks, active project context, and session metadata---into a checkpoint file. At next SessionStart, this checkpoint is used to ``warm start'' the session, restoring the agent to approximately its prior cognitive state without requiring full re-retrieval.
 
 \subsection{kworker: Asynchronous Background Processing}
 
@@ -354,7 +354,7 @@ Multiple agent instances access the same SQLite database file. WAL (Write-Ahead 
 \section{Implementation}
 \label{sec:impl}
 
-0CompactMem is implemented in Python (3.12+) as a single-file SQLite database with an MCP (Model Context Protocol) server interface. Key implementation details:
+vMem is implemented in Python (3.12+) as a single-file SQLite database with an MCP (Model Context Protocol) server interface. Key implementation details:
 
 \paragraph{Storage.} All state resides in a single SQLite~\cite{sqlite2020hipp} database file (WAL mode). The schema uses FTS5 virtual tables for full-text search (BM25 scoring~\cite{robertson2009bm25}), with standard tables for chunk metadata, pin state, and access tracking.
 
@@ -367,7 +367,7 @@ Multiple agent instances access the same SQLite database file. WAL (Write-Ahead 
   \item \texttt{list\_pinned(pin\_type, project)}
 \end{itemize}
 
-\paragraph{Hook Integration.} 0CompactMem ships as a Claude Code plugin with lifecycle hooks at six events: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, and PreCompact.
+\paragraph{Hook Integration.} vMem ships as a Claude Code plugin with lifecycle hooks at six events: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, and PreCompact.
 
 \paragraph{Scale.} The system has undergone 1{,}370+ commits of iterative development across scoring weights, eviction thresholds, and extraction heuristics. The test suite spans 348 test files containing 10{,}700+ assertions covering retrieval quality, eviction correctness, pin guarantees, and multi-agent scenarios.
 
@@ -386,7 +386,7 @@ This enables systematic debugging of the 0.35 Recall@5 gap---attributing each mi
 \section{Evaluation}
 \label{sec:eval}
 
-We evaluate 0CompactMem on four dimensions: (1) retrieval quality on a standard benchmark, (2) constraint survival under pressure, (3) multi-agent coherence, and (4) quantitative ablation. All experiments are reproducible via included scripts.
+We evaluate vMem on four dimensions: (1) retrieval quality on a standard benchmark, (2) constraint survival under pressure, (3) multi-agent coherence, and (4) quantitative ablation. All experiments are reproducible via included scripts.
 
 \subsection{Standard Benchmark: LongMemEval}
 
@@ -417,13 +417,13 @@ temporal-reasoning        & 0.903 & 133 \\
 \end{tabular}
 \end{table}
 
-\paragraph{Analysis.} 0CompactMem achieves 92.6\% session recall using only BM25+FTS5 (no embedding model). Performance is strongest on single-session queries (97--100\%) and weakest on temporal reasoning (90.3\%), where paraphrased time references challenge lexical matching. Figure~\ref{fig:lme_results} visualizes the per-type breakdown.
+\paragraph{Analysis.} vMem achieves 92.6\% session recall using only BM25+FTS5 (no embedding model). Performance is strongest on single-session queries (97--100\%) and weakest on temporal reasoning (90.3\%), where paraphrased time references challenge lexical matching. Figure~\ref{fig:lme_results} visualizes the per-type breakdown.
 
-\paragraph{Cross-system comparison.} Table~\ref{tab:comparison} contextualizes our results against publicly reported numbers. 0CompactMem achieves competitive retrieval recall without embeddings, while uniquely providing pin guarantees and multi-agent sharing.
+\paragraph{Cross-system comparison.} Table~\ref{tab:comparison} contextualizes our results against publicly reported numbers. vMem achieves competitive retrieval recall without embeddings, while uniquely providing pin guarantees and multi-agent sharing.
 
 \begin{table}[t]
 \centering
-\caption{Cross-system comparison on LongMemEval. $\dagger$Reported in Mem0 evaluation (April 2026). 0CompactMem is the only system with pin + multi-agent guarantees.}
+\caption{Cross-system comparison on LongMemEval. $\dagger$Reported in Mem0 evaluation (April 2026). vMem is the only system with pin + multi-agent guarantees.}
 \label{tab:comparison}
 \footnotesize
 \begin{tabular}{lccc}
@@ -434,7 +434,7 @@ Mem0 v3$^\dagger$      & 94.8 & Yes & No \\
 Full-context$^\dagger$ & 72.1 & N/A & No \\
 RAG baseline$^\dagger$ & 67.0 & Yes & No \\
 \midrule
-\textbf{0CompactMem}   & \textbf{92.6} & No & \textbf{Yes} \\
+\textbf{vMem}   & \textbf{92.6} & No & \textbf{Yes} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -476,7 +476,7 @@ RAG baseline$^\dagger$ & 67.0 & Yes & No \\
 \label{fig:lme_results}
 \end{figure}
 
-\paragraph{Latency advantage.} At 0.09ms p50 per query (vs.\ 35ms for embedding-based search), 0CompactMem enables demand-paging semantics where the agent retrieves \emph{during reasoning} without perceptible delay---making multi-round retrieval practical within a single LLM turn.
+\paragraph{Latency advantage.} At 0.09ms p50 per query (vs.\ 35ms for embedding-based search), vMem enables demand-paging semantics where the agent retrieves \emph{during reasoning} without perceptible delay---making multi-round retrieval practical within a single LLM turn.
 
 \subsection{Paraphrased Query Retrieval}
 \label{sec:paraphrase}
@@ -494,7 +494,7 @@ RAG baseline$^\dagger$ & 67.0 & Yes & No \\
 \toprule
 System & Recall@5 & MRR@5 \\
 \midrule
-0CompactMem (BM25)           & 0.22 $\pm$ 0.01 & 0.21 $\pm$ 0.01 \\
+vMem (BM25)           & 0.22 $\pm$ 0.01 & 0.21 $\pm$ 0.01 \\
 Vector (embedding only)    & \textbf{0.90} $\pm$ 0.02 & \textbf{0.73} $\pm$ 0.03 \\
 \bottomrule
 \end{tabular}
@@ -502,7 +502,7 @@ Vector (embedding only)    & \textbf{0.90} $\pm$ 0.02 & \textbf{0.73} $\pm$ 0.03
 
 \paragraph{Analysis.} Embedding search substantially outperforms BM25 on vocabulary-shifted queries (0.90 vs.\ 0.22). This is expected: BM25 requires lexical overlap while embeddings capture semantic similarity. We include this benchmark to honestly characterize the retrieval trade-off.
 
-\paragraph{Hybrid retrieval.} 0CompactMem's OS framework is backend-agnostic---the pin, eviction, and checkpoint semantics operate on chunk metadata regardless of how retrieval scoring works. As a proof-of-concept, we implemented Reciprocal Rank Fusion (RRF)~\cite{rrf2009cormack} combining BM25 with nomic-embed-text embeddings, achieving Recall@5 = 0.75 (vs.\ 0.22 BM25-only, 0.80 embedding-only). The hybrid approach retains all OS guarantees while closing the retrieval gap. We keep BM25-only as the default for zero-dependency deployment; hybrid mode is an optional sysctl-gated enhancement.
+\paragraph{Hybrid retrieval.} vMem's OS framework is backend-agnostic---the pin, eviction, and checkpoint semantics operate on chunk metadata regardless of how retrieval scoring works. As a proof-of-concept, we implemented Reciprocal Rank Fusion (RRF)~\cite{rrf2009cormack} combining BM25 with nomic-embed-text embeddings, achieving Recall@5 = 0.75 (vs.\ 0.22 BM25-only, 0.80 embedding-only). The hybrid approach retains all OS guarantees while closing the retrieval gap. We keep BM25-only as the default for zero-dependency deployment; hybrid mode is an optional sysctl-gated enhancement.
 
 \paragraph{Production context.} In the LongMemEval benchmark where queries use contextual terms (as agents do during reasoning), BM25 achieves 92.6\% recall---demonstrating that the paraphrasing gap is an artificial worst-case, not representative of real agent usage patterns.
 
@@ -523,12 +523,12 @@ System & Physical & Retrievable & Pin \\
 \midrule
 Vector (no pins)      & 0\%              & 0\%              & No \\
 AMV-L (lifecycle)     & 0\%              & 0\%              & No \\
-\textbf{0CompactMem}    & \textbf{100\%}   & \textbf{82\%}    & Yes \\
+\textbf{vMem}    & \textbf{100\%}   & \textbf{82\%}    & Yes \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{Analysis.} Under 4$\times$ pressure, systems without pin semantics retain 0\% of constraints---eviction has no mechanism to distinguish critical from expendable items. 0CompactMem guarantees 100\% physical survival (all 50 pinned chunks remain in the database regardless of pressure). The 82\% retrievability gap reflects BM25 limitations on paraphrased verification queries, not a pin failure.
+\paragraph{Analysis.} Under 4$\times$ pressure, systems without pin semantics retain 0\% of constraints---eviction has no mechanism to distinguish critical from expendable items. vMem guarantees 100\% physical survival (all 50 pinned chunks remain in the database regardless of pressure). The 82\% retrievability gap reflects BM25 limitations on paraphrased verification queries, not a pin failure.
 
 \paragraph{End-to-end constraint violation.} To measure downstream impact, we simulate a multi-session scenario: 20 realistic design constraints are stored, 200 work items accumulate, then eviction reduces the store to 50 chunks. An agent then queries for each constraint using natural-language paraphrases. Without pins, \textbf{100\%} of constraints are unretrievable (all evicted). With pins, the violation rate drops to \textbf{30\%} (constraints survive physically; the 30\% gap is purely lexical mismatch). Pin semantics reduce constraint violations by 70\% --- the remaining gap is addressable through hybrid retrieval (\S\ref{sec:paraphrase}).
 
@@ -540,20 +540,20 @@ AMV-L (lifecycle)     & 0\%              & 0\%              & No \\
 
 \paragraph{Results.} Agent B sees 100\% of A's committed writes and respects 100\% of A's pins during eviction. These results follow deterministically from SQLite WAL semantics---we report them as a verified property of the architecture rather than a stochastic measurement.
 
-\paragraph{Comparison.} Systems using separate per-agent stores (the default for mem0, Zep) achieve 0\% cross-agent visibility without explicit synchronization protocols. 0CompactMem's shmem-via-WAL approach eliminates this class of coordination problems.
+\paragraph{Comparison.} Systems using separate per-agent stores (the default for mem0, Zep) achieve 0\% cross-agent visibility without explicit synchronization protocols. vMem's shmem-via-WAL approach eliminates this class of coordination problems.
 
 \subsection{Scalability and Latency}
 
 \begin{table}[t]
 \centering
-\caption{Search latency at 10{,}000 chunks (measured, 1000 queries, 5 seeds). 0CompactMem requires no external model; vector baseline uses nomic-embed-text (274MB).}
+\caption{Search latency at 10{,}000 chunks (measured, 1000 queries, 5 seeds). vMem requires no external model; vector baseline uses nomic-embed-text (274MB).}
 \label{tab:latency}
 \small
 \begin{tabular}{lcc}
 \toprule
 System & p50 (ms) & p95 (ms) \\
 \midrule
-\textbf{0CompactMem (FTS5)} & \textbf{0.09} & \textbf{0.15} \\
+\textbf{vMem (FTS5)} & \textbf{0.09} & \textbf{0.15} \\
 Vector (embedding)         & 35.0           & 42.1 \\
 \bottomrule
 \end{tabular}
@@ -636,7 +636,7 @@ Each primitive contributes exactly one irreplaceable property. Notably, these ar
 \section{Deployment Experience}
 \label{sec:deployment}
 
-0CompactMem has been deployed as a Claude Code plugin by the first author in daily kernel development and software engineering workflows. We report qualitative observations from single-user deployment (not a controlled user study):
+vMem has been deployed as a Claude Code plugin by the first author in daily kernel development and software engineering workflows. We report qualitative observations from single-user deployment (not a controlled user study):
 
 \paragraph{Pin usage patterns.} The deployed store contains hard-pinned architectural constraints and API contracts. These represent a small fraction of total chunks but are disproportionately critical---their loss causes observable agent misbehavior (re-violating previously-established constraints). Figure~\ref{fig:casestudy} shows a representative interaction trace.
 
@@ -683,11 +683,11 @@ Each primitive contributes exactly one irreplaceable property. Notably, these ar
 
 \paragraph{When is the full OS approach warranted?} Systems that only need simple retrieval (single session, no constraints) can use simpler stores. The full OS approach pays off when: (1) constraints must provably survive pressure, (2) multiple agents share state, or (3) sessions span weeks/months with accumulating knowledge.
 
-\paragraph{Limitations.} 0CompactMem is single-machine (SQLite). Distributed multi-node scenarios require a different coordination protocol. The BM25+importance scorer, while effective, does not use learned embeddings---a deliberate trade-off for zero-dependency deployment. The privacy filter uses regex patterns rather than NER models, which may miss novel PII patterns.
+\paragraph{Limitations.} vMem is single-machine (SQLite). Distributed multi-node scenarios require a different coordination protocol. The BM25+importance scorer, while effective, does not use learned embeddings---a deliberate trade-off for zero-dependency deployment. The privacy filter uses regex patterns rather than NER models, which may miss novel PII patterns.
 
 \paragraph{Why not just increase context windows?} Larger windows defer but don't solve the problem. At 1M tokens, compaction still occurs in long sessions. More fundamentally, shared multi-agent state cannot live in any single agent's context window. And even without compaction, 200K tokens of accumulated context degrades retrieval quality---the model cannot attend equally to token 1 and token 199{,}999.
 
-\paragraph{Comparison with biological memory models.} Recent work~\cite{humaninspired2026,episodicsemantic2026} models hippocampal consolidation and sleep-phase memory processing. While cognitively plausible, these systems optimize for human-like forgetting curves rather than engineering guarantees. 0CompactMem's OS framing is complementary: one could implement biologically-inspired scoring \emph{within} the OS framework while retaining pinning guarantees and multi-agent semantics.
+\paragraph{Comparison with biological memory models.} Recent work~\cite{humaninspired2026,episodicsemantic2026} models hippocampal consolidation and sleep-phase memory processing. While cognitively plausible, these systems optimize for human-like forgetting curves rather than engineering guarantees. vMem's OS framing is complementary: one could implement biologically-inspired scoring \emph{within} the OS framework while retaining pinning guarantees and multi-agent semantics.
 
 %% ============================================================
 \section{Future Work}
@@ -699,7 +699,7 @@ The OS memory analogy suggests several natural extensions:
 
 \paragraph{Adaptive watermarks.} Current watermarks are static configuration. An adaptive system could learn eviction thresholds from observed access patterns, analogous to Linux's automatic NUMA balancing that migrates pages based on access locality.
 
-\paragraph{Cross-store federation (VFS layer).} Multiple 0CompactMem instances (personal, team, organization) could be unified through a virtual filesystem layer, analogous to Linux's VFS that presents ext4, NFS, and tmpfs through a single interface.
+\paragraph{Cross-store federation (VFS layer).} Multiple vMem instances (personal, team, organization) could be unified through a virtual filesystem layer, analogous to Linux's VFS that presents ext4, NFS, and tmpfs through a single interface.
 
 \paragraph{Learned scoring.} The current BM25+importance scorer could be augmented with fine-tuned embedding models for domain-specific retrieval, while maintaining pin guarantees as a separate enforcement layer---analogous to how Linux supports both simple FIFO scheduling and CFS without compromising RT priority guarantees.
 
@@ -709,7 +709,7 @@ The OS memory analogy suggests several natural extensions:
 \section{Conclusion}
 \label{sec:conclusion}
 
-We presented 0CompactMem, an agent memory system that systematically maps seven OS memory-management primitives to agent-memory operations. Our key contributions are: (1) a complete OS$\to$agent taxonomy identifying which guarantee each primitive enables; (2) verifiable pin semantics that provably guarantee constraint survival under arbitrary pressure; and (3) empirical validation on LongMemEval (500 questions, 92.6\% retrieval recall) with quantitative ablation confirming each primitive is necessary.
+We presented vMem, an agent memory system that systematically maps seven OS memory-management primitives to agent-memory operations. Our key contributions are: (1) a complete OS$\to$agent taxonomy identifying which guarantee each primitive enables; (2) verifiable pin semantics that provably guarantee constraint survival under arbitrary pressure; and (3) empirical validation on LongMemEval (500 questions, 92.6\% retrieval recall) with quantitative ablation confirming each primitive is necessary.
 
 The ablation result is the paper's central finding: OS memory primitives form a minimal complete set where removing any single primitive causes binary loss of exactly one system guarantee. This argues for principled, systematic adoption of OS abstractions rather than ad-hoc cherry-picking.
 

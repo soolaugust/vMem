@@ -1,8 +1,8 @@
 <div align="center">
 
-# 0CompactMem
+# vMem
 
-**零压缩。无限记忆。为 Claude Code 和所有 LLM agent 而生。**
+**LLM 上下文的虚拟内存。为 Claude Code 和所有 AI agent 而生。**
 
 *你的 AI 永不失忆——告别 "context compacted" 的痛苦。*
 
@@ -10,7 +10,7 @@
 [![SQLite](https://img.shields.io/badge/storage-SQLite%20WAL-lightgrey?logo=sqlite)](https://sqlite.org/)
 [![Tests](https://img.shields.io/badge/tests-3500%2B%20passing-brightgreen)](#测试)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Discussions](https://img.shields.io/badge/讨论-GitHub-blue?logo=github)](https://github.com/soolaugust/0CompactMem/discussions)
+[![Discussions](https://img.shields.io/badge/讨论-GitHub-blue?logo=github)](https://github.com/soolaugust/vMem/discussions)
 
 [English](./README.md) · [中文](./README.zh.md)
 
@@ -18,7 +18,7 @@
 
 > **Claude Code 一行装：**
 > ```
-> /install-plugin github:soolaugust/0CompactMem
+> /install-plugin github:soolaugust/vMem
 > ```
 
 ---
@@ -39,17 +39,17 @@
 
 ---
 
-## 解法：让记忆在 compaction 之外持久存活
+## 解法：用 OS 的方式管理上下文
 
-0CompactMem 给你的 AI agent **持久化、可检索的记忆**，活在 context window 之外。当 compaction 发生时，什么都不丢——因为重要的东西从一开始就不仅仅存在于 context window 里。
+vMem 给你的 AI agent **持久化、可检索的上下文**：context window 是热工作集，长期知识在窗口外持久保存，需要时再按需分页回来。
 
-结果：**零有效压缩**。你的 AI 跨 session、跨 compaction、跨 agent 保留每一个决策、约束和教训。
+结果：**OS 管理的上下文连续性**。你的 AI 跨 session、跨 compaction、跨 agent 保留每一个决策、约束和教训。
 
 ### 工作流程
 
 ```
 你说话
-  → 0CompactMem 检索相关记忆 → 注入 context
+  → vMem 检索相关记忆 → 注入 context
   → AI 带着完整上下文回答
   → Session 结束 → 决策和洞察自动提取 → 持久化
   → Compaction 发生？没影响——记忆活在 window 外
@@ -60,24 +60,26 @@
 
 ---
 
-## 为什么叫 "0CompactMem"？
+## 为什么叫 "vMem"？
 
-| 别人看到的 | 实际发生的 |
+`vMem` 是 LLM 上下文的 virtual memory：不再把 context window 当成全部世界，而是用 OS 原语管理热工作集和持久知识。
+
+| 别人看到的 | vMem 实际做的 |
 |---|---|
-| "Context compacted" | 关键知识早已持久化到记忆库 |
+| "Context compacted" | 关键知识早已在窗口外持久化 |
 | 新 session 启动 | 工作集 <100ms 自动恢复 |
-| 多个 agent 并行跑 | 共享同一份记忆——零重复解释 |
-| 3 周前定的约束 | 钉死在记忆中，保证永不被淘汰 |
+| 多个 agent 并行跑 | 共享同一个受管理的上下文底座 |
+| 3 周前定的约束 | 用 `mlock` 风格语义钉住 |
 
-**零压缩影响。零上下文丢失。零重复解释。**
+**OS 管理上下文。工作集可恢复。无需重复解释。**
 
 ---
 
-## 底层原理：OS 内存管理给 AI 用
+## 底层原理：OS 上下文管理给 AI 用
 
 秘密武器？我们没发明新算法，直接搬了 Linux 内核做了 40 年的东西：
 
-| OS 概念 | 0CompactMem 对应 |
+| OS 概念 | vMem 对应 |
 |---|---|
 | RAM（工作区） | Context window — AI 当前看到的 |
 | 磁盘（持久存储） | 知识库 — 跨 session 存活的事实 |
@@ -92,10 +94,10 @@
 
 ## 跟同类方案的对比
 
-|                          | **0CompactMem**          | mem0           | Letta (MemGPT) | Zep            |
+|                          | **vMem**          | mem0           | Letta (MemGPT) | Zep            |
 |--------------------------|--------------------------|----------------|----------------|----------------|
-| 设计隐喻                 | OS 内存子系统            | 向量库         | Agent 运行时   | 时序图         |
-| 零压缩保证               | ✅ pinned 记忆存活       | ❌             | ❌             | ❌             |
+| 设计隐喻                 | OS 管理上下文            | 向量库         | Agent 运行时   | 时序图         |
+| 上下文连续性             | ✅ pinned 知识存活       | ❌             | ❌             | ❌             |
 | 多 agent 共享            | ✅ 原生单库              | ⚠️ 需 API     | ✅             | ✅             |
 | MCP 原生                 | ✅ 一等公民              | ❌             | ❌             | ❌             |
 | 单文件部署               | ✅ SQLite，无需服务      | ❌ 需服务端    | ❌ 需服务端    | ❌ 需服务端    |
@@ -103,7 +105,7 @@
 | 淘汰策略                 | ✅ kswapd + DAMON        | 仅 TTL         | 仅 recency     | recency + decay|
 | Pin / mlock 语义         | ✅                       | ❌             | ❌             | ❌             |
 
-> **一句话**：如果你受够了 context compaction 清空你的 AI 记忆，想要一个 `pip install` 就能用、笔记本上跑、多 agent 共享、关键约束永不丢失的方案——0CompactMem 就是为你做的。
+> **一句话**：如果你受够了 context compaction 清空你的 AI 记忆，想要一个 `pip install` 就能用、笔记本上跑、多 agent 共享、关键约束永不丢失的方案——vMem 就是为你做的。
 
 ---
 
@@ -124,14 +126,14 @@
 **一行安装（推荐）**
 
 ```
-/install-plugin github:soolaugust/0CompactMem
+/install-plugin github:soolaugust/vMem
 ```
 
 **手动安装**
 
 ```bash
-git clone https://github.com/soolaugust/0CompactMem
-cd 0CompactMem
+git clone https://github.com/soolaugust/vMem
+cd vMem
 pip install -e .
 mkdir -p ~/.claude/memory-os
 ```
@@ -177,7 +179,7 @@ python3 -m pytest tests/test_agent_team.py tests/test_chaos.py -q
 
 ## 论文
 
-📄 **[Beyond Eviction: Full OS Memory Semantics for LLM Agent Persistence](https://github.com/soolaugust/0CompactMem/releases/download/v0.1.0/main.pdf)** (PDF, 8 页)
+📄 **[Beyond Eviction: Full OS Memory Semantics for LLM Agent Persistence](https://github.com/soolaugust/vMem/releases/download/v0.1.0/main.pdf)** (PDF, 8 页)
 
 技术论文，描述完整的 OS→agent-memory 映射：demand paging、kswapd、DAMON、mlock、CRIU、kworker、shared memory。
 
@@ -185,23 +187,23 @@ python3 -m pytest tests/test_agent_team.py tests/test_chaos.py -q
 
 ```bibtex
 @software{su2026compactmem,
-  title = {0CompactMem: Full OS Memory Semantics for LLM Agent Persistence},
+  title = {vMem: Full OS Memory Semantics for LLM Agent Persistence},
   author = {Su, Zhidao},
   year = {2026},
-  url = {https://github.com/soolaugust/0CompactMem}
+  url = {https://github.com/soolaugust/vMem}
 }
 ```
 
 ## 贡献
 
-每个子系统藏在干净的 VFS 接口后面，可独立测试。欢迎 issue、设计提案和 PR — 设计问题见 [Discussions](https://github.com/soolaugust/0CompactMem/discussions)，提交 PR 前请跑一遍上面的测试子集。
+每个子系统藏在干净的 VFS 接口后面，可独立测试。欢迎 issue、设计提案和 PR — 设计问题见 [Discussions](https://github.com/soolaugust/vMem/discussions)，提交 PR 前请跑一遍上面的测试子集。
 
 ---
 
 <div align="center">
 
 *Context compaction 是 Claude Code 的头号生产力杀手。*
-*0CompactMem 让它变成一个不存在的问题。*
+*vMem 让它变成一个不存在的问题。*
 
 **[English](./README.md) · [中文](./README.zh.md)**
 

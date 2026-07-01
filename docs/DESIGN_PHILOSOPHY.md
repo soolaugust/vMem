@@ -1,6 +1,6 @@
-# Design Philosophy — OS / cognitive primitives behind 0CompactMem
+# Design Philosophy — OS / cognitive primitives behind vMem
 
-> Every subsystem in 0CompactMem maps onto a known mechanism — most from the
+> Every subsystem in vMem maps onto a known mechanism — most from the
 > Linux kernel, some from cognitive science. This page is the full mapping,
 > mainly for contributors and curious readers. The README only lists the
 > top-level metaphor; the table below is the "long form."
@@ -85,4 +85,4 @@ right primitive instead of inventing a new one.
 When you read this list, the mental shift is: every row is a *named tool*
 with known semantics. "Page fault" already tells you what should happen
 on a miss. "mlock" already tells you what cannot be evicted. The job of
-0CompactMem is just to keep that mapping honest.
+vMem is just to keep that mapping honest.

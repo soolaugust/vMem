@@ -1,8 +1,8 @@
 <div align="center">
 
-# 0CompactMem
+# vMem
 
-**Zero compaction. Infinite memory. For Claude Code and every LLM agent.**
+**Virtual memory for LLM context. For Claude Code and every AI agent.**
 
 *Your AI never forgets — no more "context compacted" interruptions.*
 
@@ -10,7 +10,7 @@
 [![SQLite](https://img.shields.io/badge/storage-SQLite%20WAL-lightgrey?logo=sqlite)](https://sqlite.org/)
 [![Tests](https://img.shields.io/badge/tests-3500%2B%20passing-brightgreen)](#testing)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Discussions](https://img.shields.io/badge/discuss-on%20GitHub-blue?logo=github)](https://github.com/soolaugust/0CompactMem/discussions)
+[![Discussions](https://img.shields.io/badge/discuss-on%20GitHub-blue?logo=github)](https://github.com/soolaugust/vMem/discussions)
 
 [English](./README.md) · [中文](./README.zh.md)
 
@@ -18,7 +18,7 @@
 
 > **One-line install via Claude Code:**
 > ```
-> /install-plugin github:soolaugust/0CompactMem
+> /install-plugin github:soolaugust/vMem
 > ```
 
 ---
@@ -39,17 +39,17 @@ And if you run multiple agents? They can't share what they've learned. Each one 
 
 ---
 
-## The solution: persistent memory that survives compaction
+## The solution: persistent context that survives compaction
 
-0CompactMem gives your AI agents **persistent, retrievable memory** that lives outside the context window. When compaction happens, nothing is lost — because the important stuff was never only in the context window to begin with.
+vMem gives your AI agents **persistent, retrievable context** managed like virtual memory: the context window is the hot working set, and durable knowledge lives outside it until demand-paged back in.
 
-The result: **zero effective compaction**. Your AI retains every decision, constraint, and lesson across sessions, across compactions, across agents.
+The result: **OS-managed context continuity**. Your AI retains every decision, constraint, and lesson across sessions, across compactions, across agents.
 
 ### How it works
 
 ```
 You speak
-  → 0CompactMem retrieves relevant memories → injects into context
+  → vMem retrieves relevant memories → injects into context
   → AI responds with full context
   → Session ends → decisions and insights auto-extracted → persisted
   → Compaction happens? No problem — memories survive outside the window
@@ -60,24 +60,26 @@ The whole pipeline runs inside Claude Code hooks. There is no manual memory mana
 
 ---
 
-## Why "0CompactMem"?
+## Why "vMem"?
 
-| What others see | What actually happens |
+`vMem` is virtual memory for LLM context: instead of treating the context window as the whole world, it manages a working set with OS primitives.
+
+| What others see | What vMem does |
 |---|---|
-| "Context compacted" | Critical knowledge already persisted to memory store |
+| "Context compacted" | Durable knowledge already lives outside the window |
 | New session starts | Working set auto-restored in <100ms |
-| Multiple agents running | All share the same memory — no re-explanation |
-| Constraint decided 3 weeks ago | Pinned in memory, guaranteed never evicted |
+| Multiple agents running | All share one managed context substrate |
+| Constraint decided 3 weeks ago | Pinned with `mlock`-style semantics |
 
-**Zero compaction impact. Zero context loss. Zero re-explanation.**
+**OS-managed context. Durable working sets. No repeated explanation.**
 
 ---
 
-## Under the hood: OS memory management for AI
+## Under the hood: OS context management for AI
 
 The secret sauce? We didn't invent new algorithms. We borrowed what the Linux kernel has been doing for 40 years:
 
-| OS concept | 0CompactMem equivalent |
+| OS concept | vMem equivalent |
 |---|---|
 | RAM (working space) | Context window — what the AI sees right now |
 | Disk (persistent storage) | Knowledge base — facts that survive across sessions |
@@ -92,10 +94,10 @@ The secret sauce? We didn't invent new algorithms. We borrowed what the Linux ke
 
 ## How is this different from mem0 / Letta / Zep?
 
-|                          | **0CompactMem**          | mem0           | Letta (MemGPT) | Zep            |
+|                          | **vMem**          | mem0           | Letta (MemGPT) | Zep            |
 |--------------------------|--------------------------|----------------|----------------|----------------|
-| Design metaphor          | OS memory subsystem      | Vector store   | Agent runtime  | Temporal graph |
-| Zero-compact guarantee   | ✅ pinned memories survive| ❌             | ❌             | ❌             |
+| Design metaphor          | OS-managed context       | Vector store   | Agent runtime  | Temporal graph |
+| Context continuity       | ✅ pinned knowledge survives | ❌          | ❌             | ❌             |
 | Multi-agent shared       | ✅ native, single store  | ⚠️ via API     | ✅             | ✅             |
 | MCP-native               | ✅ first-class           | ❌             | ❌             | ❌             |
 | Single-file deploy       | ✅ SQLite, no service    | ❌ needs server| ❌ needs server| ❌ needs server|
@@ -103,7 +105,7 @@ The secret sauce? We didn't invent new algorithms. We borrowed what the Linux ke
 | Eviction policy          | ✅ kswapd + DAMON        | TTL only       | recency        | recency + decay|
 | Pin / mlock semantics    | ✅                       | ❌             | ❌             | ❌             |
 
-> **TL;DR.** If you're tired of context compaction wiping your AI's memory, and you want a solution that's `pip install`, runs as a sidecar on a laptop, shares between several Claude Code / Cursor / custom agents, and never loses a pinned constraint — 0CompactMem is built for that.
+> **TL;DR.** If you're tired of context compaction wiping your AI's memory, and you want a solution that's `pip install`, runs as a sidecar on a laptop, shares between several Claude Code / Cursor / custom agents, and never loses a pinned constraint — vMem is built for that.
 
 ---
 
@@ -124,14 +126,14 @@ The secret sauce? We didn't invent new algorithms. We borrowed what the Linux ke
 **One-line install (recommended).**
 
 ```
-/install-plugin github:soolaugust/0CompactMem
+/install-plugin github:soolaugust/vMem
 ```
 
 **Manual install.**
 
 ```bash
-git clone https://github.com/soolaugust/0CompactMem
-cd 0CompactMem
+git clone https://github.com/soolaugust/vMem
+cd vMem
 pip install -e .
 mkdir -p ~/.claude/memory-os
 ```
@@ -154,7 +156,7 @@ For the full layered diagram, on-disk schema, and the rationale behind each subs
 
 ## Roadmap
 
-- **Distributed 0CompactMem** — cgroup-style multi-agent quotas, network-replicated stores
+- **Distributed vMem** — cgroup-style multi-agent quotas, network-replicated stores
 - **Adaptive watermarks** — eviction tuning that follows observed agent behavior
 - **arXiv preprint** — formal evaluation against mem0 / Letta / Zep
 - **Per-chunk embedding routing** — different models for code vs prose
@@ -188,31 +190,31 @@ No GPU. No external API. Everything runs locally.
 
 ## Paper
 
-📄 **[Beyond Eviction: Full OS Memory Semantics for LLM Agent Persistence](https://github.com/soolaugust/0CompactMem/releases/download/v0.1.0/main.pdf)** (PDF, 8 pages)
+📄 **[Beyond Eviction: Full OS Context-Management Semantics for LLM Agent Persistence](https://github.com/soolaugust/vMem/releases/download/v0.1.0/main.pdf)** (PDF, 8 pages)
 
-Technical paper describing the complete OS→agent-memory mapping: demand paging, kswapd, DAMON, mlock, CRIU, kworker, and shared memory.
+Technical paper describing the complete OS→agent-context mapping: demand paging, kswapd, DAMON, mlock, CRIU, kworker, and shared memory.
 
 ## Citation
 
 ```bibtex
 @software{su2026compactmem,
-  title = {0CompactMem: Full OS Memory Semantics for LLM Agent Persistence},
+  title = {vMem: Full OS Memory Semantics for LLM Agent Persistence},
   author = {Su, Zhidao},
   year = {2026},
-  url = {https://github.com/soolaugust/0CompactMem}
+  url = {https://github.com/soolaugust/vMem}
 }
 ```
 
 ## Contributing
 
-Each subsystem hides behind a clean VFS interface, so components are testable in isolation. Issues, design proposals, and pull requests are welcome — see the [Discussions tab](https://github.com/soolaugust/0CompactMem/discussions) for design questions, and please run the test subset above before submitting a PR.
+Each subsystem hides behind a clean VFS interface, so components are testable in isolation. Issues, design proposals, and pull requests are welcome — see the [Discussions tab](https://github.com/soolaugust/vMem/discussions) for design questions, and please run the test subset above before submitting a PR.
 
 ---
 
 <div align="center">
 
 *Context compaction is the #1 productivity killer in Claude Code.*
-*0CompactMem makes it a non-event.*
+*vMem makes it a non-event.*
 
 **[English](./README.md) · [中文](./README.zh.md)**
 

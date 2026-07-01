@@ -12,12 +12,12 @@ Each tweet <= 280 characters, hand-counted.
 
 > "Context compacted" — the 2 words every Claude Code user dreads.
 >
-> 0CompactMem: persistent memory that survives compaction.
-> OS memory management (kswapd, mlock, demand paging) for AI agents.
+> vMem: persistent context that survives compaction.
+> OS context management (kswapd, mlock, demand paging) for AI agents.
 >
 > Single SQLite file. MCP-native. Multi-agent shared. MIT.
 >
-> https://github.com/soolaugust/0CompactMem
+> https://github.com/soolaugust/vMem
 
 ---
 
@@ -56,11 +56,11 @@ Each tweet <= 280 characters, hand-counted.
 > mlock ↔ pin, never evict
 >
 > Same problem. Same solutions transfer.
-> That's what 0CompactMem is.
+> That's what vMem is.
 
 ### 4/6 — what it does
 
-> 0CompactMem: zero effective compaction for Claude Code.
+> vMem: OS-managed context continuity for Claude Code.
 >
 > - Memories persist OUTSIDE the context window
 > - Compaction hits? Working set auto-restores in <100ms
@@ -73,11 +73,11 @@ Each tweet <= 280 characters, hand-counted.
 
 > One-line install in Claude Code:
 >
->     /install-plugin github:soolaugust/0CompactMem
+>     /install-plugin github:soolaugust/vMem
 >
 > Or:
 >
->     git clone https://github.com/soolaugust/0CompactMem
+>     git clone https://github.com/soolaugust/vMem
 >     pip install -e .
 >
 > v0.1.0 just shipped. MIT licensed.
@@ -91,7 +91,7 @@ Each tweet <= 280 characters, hand-counted.
 >
 > Zero compact. Infinite memory.
 >
-> https://github.com/soolaugust/0CompactMem
+> https://github.com/soolaugust/vMem
 
 ---
 
@@ -123,22 +123,22 @@ Avoid: `#AI` (too noisy), `#OpenSource` (too generic).
 > "Context compacted" happens because critical knowledge lives only in
 > the context window. Move it outside, and compaction becomes invisible.
 >
-> 0CompactMem — OS-grade persistent memory for LLM agents.
+> vMem — OS-grade persistent context for LLM agents.
 >
-> https://github.com/soolaugust/0CompactMem
+> https://github.com/soolaugust/vMem
 
 > Hot take: "infinite context window" is the wrong solution.
 >
-> The right solution: persistent memory that makes window size irrelevant.
+> The right solution: persistent context that makes window size irrelevant.
 >
-> 0CompactMem: demand paging, kswapd eviction, mlock pinning for AI.
+> vMem: demand paging, kswapd eviction, mlock pinning for AI.
 >
-> https://github.com/soolaugust/0CompactMem
+> https://github.com/soolaugust/vMem
 
 > I fixed Claude Code's compaction problem.
 >
 > Not by making the context bigger. By making memory persistent.
 >
-> 0CompactMem — one SQLite file, MCP-native, zero context loss.
+> vMem — one SQLite file, MCP-native, OS-managed context continuity.
 >
-> https://github.com/soolaugust/0CompactMem
+> https://github.com/soolaugust/vMem

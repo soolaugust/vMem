@@ -30,7 +30,7 @@ class VFSItem:
     type: VFSItemType                 # decision|rule|trace|reference|...
     content: str                      # 完整内容
     summary: str                      # 摘要 (<120 字符)
-    source: VFSSource                 # memory-os|memory-md|self-improving|project
+    source: VFSSource                 # vMem|memory-md|self-improving|project
     metadata: VFSMetadata             # 元数据
     score: float                      # 检索相关度 0.0-1.0
     path: str                         # 虚拟路径 /<source>/<id>
@@ -82,7 +82,7 @@ L3: 后端存储（冷路径）
 /<source>/<id>
 
 示例：
-  /memory-os/chunk-uuid-123abc          SQLite chunk ID
+  /vMem/chunk-uuid-123abc          SQLite chunk ID
   /memory-md/feishu_access_method       MEMORY.md 索引行
   /self-improving/domains/vfs.md        self-improving 文件路径
   /project/history-uuid-xyz              项目 JSONL 条目 ID
@@ -92,9 +92,9 @@ L3: 后端存储（冷路径）
 
 ```
 search(query) 
-  → 并行查询 [memory-os, self-improving, project]
+  → 并行查询 [vMem, self-improving, project]
   → 每个后端返回 top_k 结果
-  → 应用源权重 {memory-os: 1.0, self-improving: 0.7, project: 0.6}
+  → 应用源权重 {vMem: 1.0, self-improving: 0.7, project: 0.6}
   → 全局去重（同 summary 保留最高分）
   → 返回排序结果
   → 总耗时 <= 100ms（hard deadline）
@@ -102,7 +102,7 @@ search(query)
 
 ## 后端适配器
 
-### SQLiteBackend（memory-os 存储）
+### SQLiteBackend（vMem 存储）
 
 **数据源**：`~/.claude/memory-os/store.db`
 
@@ -155,12 +155,12 @@ def search(
 ```python
 [
   {
-    "source": "memory-os",
+    "source": "vMem",
     "chunk_type": "decision",
     "summary": "Brief summary text",
     "score": 0.95,
     "content": "Full content (up to 300 chars)...",
-    "path": "/memory-os/chunk-id"
+    "path": "/vMem/chunk-id"
   },
   ...
 ]

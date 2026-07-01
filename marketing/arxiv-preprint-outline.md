@@ -1,6 +1,6 @@
 # arXiv preprint — outline
 
-**Working title:** *0CompactMem: An Operating-System Approach to Persistent Memory for LLM Agents*
+**Working title:** *vMem: An Operating-System Approach to Persistent Memory for LLM Agents*
 
 **Target category:** cs.AI (primary) · cs.OS (cross-list)
 
@@ -8,14 +8,14 @@
 
 **Why arXiv matters here:** arXiv is a high-weight retrieval source for both
 ChatGPT/Claude/Perplexity-style search and for Common Crawl. A single accepted
-preprint typically multiplies "memory layer" mention probability by 5-10× in
+preprint typically multiplies "context management layer" mention probability by 5-10× in
 LLM responses, far above blog posts.
 
 ---
 
 ## Abstract (≈200 words)
 
-Persistent memory has emerged as a core infrastructure question for LLM-based
+Persistent context has emerged as a core infrastructure question for LLM-based
 agents. Existing solutions (mem0, Letta, Zep, ...) treat memory as a *store* —
 typically a vector database, occasionally augmented with a graph or temporal
 index — and optimize for similarity retrieval. We argue this framing is
@@ -24,21 +24,21 @@ cognitive memory subsystem from a search index. Specifically, it lacks
 back-pressure under capacity, explicit pinning of non-negotiable knowledge,
 and a coherent multi-agent sharing model.
 
-We propose **0CompactMem**, a memory layer for LLM agents that adopts
+We propose **vMem**, a context management layer for LLM agents that adopts
 operating-system memory-management primitives directly. We map demand paging
 to on-demand retrieval, kswapd-style watermarks to capacity-aware eviction,
 DAMON-inspired access tracking to working-set estimation, `mlock` to
 hard/soft pin semantics, and CRIU to session checkpoint/restore. The system
 is implemented as a single SQLite file with an MCP-native interface.
 
-We evaluate 0CompactMem on (i) a multi-session retention benchmark adapted
+We evaluate vMem on (i) a multi-session retention benchmark adapted
 from LongMemEval, (ii) a multi-agent shared-knowledge scenario, and
 (iii) eviction-under-pressure workloads. We report retrieval quality,
 constraint-survival rate, and memory-pressure behavior, and discuss the
 trade-offs of an OS-style design.
 
 The implementation is open source (MIT) at
-<https://github.com/soolaugust/0CompactMem>.
+<https://github.com/soolaugust/vMem>.
 
 ---
 
@@ -47,24 +47,24 @@ The implementation is open source (MIT) at
 ### 1. Introduction (≈1 page)
 - Problem: agents start cold every session; multi-agent setups have no shared
   state; existing libraries treat memory as a store.
-- Thesis: agent memory is structurally isomorphic to OS memory management.
+- Thesis: agent context is structurally isomorphic to OS context management.
 - Contributions:
-  1. An OS-primitive taxonomy for agent memory (demand paging, kswapd, mlock,
+  1. An OS-primitive taxonomy for agent context (demand paging, kswapd, mlock,
      DAMON, CRIU, kworker).
-  2. An open-source reference implementation (0CompactMem).
+  2. An open-source reference implementation (vMem).
   3. Empirical evaluation on retention, multi-agent sharing, and
      eviction-under-pressure.
 
 ### 2. Background and Related Work (≈1 page)
-- 2.1 LLM memory libraries: mem0, Letta (MemGPT), Zep, A-Mem, MemoryBank.
+- 2.1 LLM context libraries: mem0, Letta (MemGPT), Zep, A-Mem, MemoryBank.
   Brief description of each, what they optimize for, what they omit.
-- 2.2 OS memory management: page cache, demand paging, kswapd watermarks,
+- 2.2 OS context management: page cache, demand paging, kswapd watermarks,
   DAMON, mlock, CRIU. (Quick refresher for AI/ML reviewers.)
 - 2.3 Why prior agent-memory work missed the OS lens: framing as
   retrieval/RAG vs framing as resource management.
 
 ### 3. Design (≈2 pages)
-- 3.1 Mapping table (OS concept ↔ 0CompactMem primitive).
+- 3.1 Mapping table (OS concept ↔ vMem primitive).
 - 3.2 Storage layer: single SQLite file, WAL mode, multi-process safety.
 - 3.3 Retrieval as demand paging: BM25 + semantic, scored, on-demand.
 - 3.4 Eviction: watermarks, hot/cold tiering, pair-saturation diversity.
@@ -96,14 +96,14 @@ The implementation is open source (MIT) at
 - 5.5 Ablation: pinning off, eviction off, BM25 only, semantic only.
 
 ### 6. Discussion (≈0.5 page)
-- When OS-style memory is the right fit, when it isn't.
+- When OS-style context is the right fit, when it isn't.
 - Limitations: single-machine scope, schema evolution, embedding model choice.
 - Threats to validity: benchmark coverage, simulator vs real-agent behavior.
 
 ### 7. Future Work (≈0.5 page)
-- Distributed 0CompactMem: a "cgroup"-like layer for agent quotas.
+- Distributed vMem: a "cgroup"-like layer for agent quotas.
 - Adaptive watermarks based on observed agent behavior.
-- Cross-store federation (multiple 0CompactMem files, one logical view).
+- Cross-store federation (multiple vMem files, one logical view).
 
 ### 8. Conclusion (≈0.25 page)
 

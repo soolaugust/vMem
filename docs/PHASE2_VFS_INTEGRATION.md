@@ -2,7 +2,7 @@
 
 **发布时间**: 2026-04-20  
 **状态**: ✅ 完成（所有性能目标达成）  
-**代码位置**: `/aios/memory-os/vfs*.py`
+**代码位置**: `/aios/vMem/vfs*.py`
 
 ---
 
@@ -22,7 +22,7 @@ for item in results:
     print(f"{item.path}: {item.summary} (score={item.score:.3f})")
 
 # 读取单项
-item = vfs.read("/memory-os/chunk-001")
+item = vfs.read("/vMem/chunk-001")
 if item:
     print(item.content)
 ```
@@ -63,7 +63,7 @@ def _search_knowledge(query: str, top_k: int = 5) -> List[dict]:
 /<source>/<id>
 
 例：
-  /memory-os/chunk-uuid-123abc       ← 从 memory-os store.db
+  /vMem/chunk-uuid-123abc       ← 从 vMem store.db
   /memory-md/feishu_access_method    ← 待实现：从 memory-md
   /self-improving/domains/vfs.md     ← 待实现：从 self-improving
   /project/history-uuid-xyz          ← 待实现：从项目 JSONL
@@ -104,7 +104,7 @@ for item in all_items:
 
 # 应用源权重
 source_weights = {
-    "memory-os": 1.0,         # 主存储，最高权重
+    "vMem": 1.0,         # 主存储，最高权重
     "self-improving": 0.7,    # 知识库，中等权重
     "project": 0.6,           # 项目历史，较低权重
 }

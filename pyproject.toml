@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "memory-os"
+name = "vmem"
 version = "0.1.0"
-description = "Kernel-grade persistent memory for AI agents — designed like an OS memory subsystem"
+description = "OS-managed context for AI agents — demand paging, pinning, and reclaim for LLM working sets"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
@@ -26,11 +26,12 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/soolaugust/0CompactMem"
-Repository = "https://github.com/soolaugust/0CompactMem"
-Issues = "https://github.com/soolaugust/0CompactMem/issues"
+Homepage = "https://github.com/soolaugust/vMem"
+Repository = "https://github.com/soolaugust/vMem"
+Issues = "https://github.com/soolaugust/vMem/issues"
 
 [project.scripts]
+vmem = "mcp_memory_lookup:main"
 memory-os = "mcp_memory_lookup:main"
 
 [tool.hatch.build.targets.wheel]

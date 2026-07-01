@@ -1,4 +1,4 @@
-# Memory OS Retrieval Quality Benchmark
+# vMem Retrieval Quality Benchmark
 
 **执行时间**: 2026-04-19 (Thursday)  
 **测试环境**: `<repo-root>`
@@ -7,7 +7,7 @@
 
 ## 📋 Executive Summary
 
-为 Memory OS 构建并运行检索质量 benchmark，采用 **15 个测试用例**量化检索系统性能。
+为 vMem 构建并运行检索质量 benchmark，采用 **15 个测试用例**量化检索系统性能。
 
 **核心发现**：BM25 + Scorer 检索系统相比纯 importance baseline，在 **recall@3 上获得 +147.1% 的提升**。
 
@@ -211,7 +211,7 @@ Avg Hits@3:  0.27   (每查询平均命中数)
 
 ## 🎓 Conclusions
 
-Memory OS 的 **BM25+Scorer 检索系统相比纯 importance baseline，在 recall@3 上获得 +147.1% 的提升**，验证了：
+vMem 的 **BM25+Scorer 检索系统相比纯 importance baseline，在 recall@3 上获得 +147.1% 的提升**，验证了：
 
 ✅ **系统的核心价值**:
 - 文本相关性匹配极大提升召回率

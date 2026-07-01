@@ -12,11 +12,11 @@
 >
 > 几小时的上下文、决策、约束——一次压缩全没了。
 >
-> 0CompactMem：让记忆活在 context window 之外。Compact 随便来，什么都不丢。
+> vMem：让记忆活在 context window 之外。Compact 随便来，什么都不丢。
 >
 > 单文件 SQLite，多 agent 共享，MCP 原生。MIT。
 >
-> https://github.com/soolaugust/0CompactMem
+> https://github.com/soolaugust/vMem
 
 ---
 
@@ -26,10 +26,10 @@
 >
 > 不是因为 context window 无限大——而是因为记忆不再住在 window 里。
 >
-> 0CompactMem：把 Linux 内核 40 年的内存管理搬给 AI 用。
+> vMem：把 Linux 内核 40 年的内存管理搬给 AI 用。
 > Demand paging > top-K 相似。Pin > TTL。水位线 > 无限增长。
 >
-> https://github.com/soolaugust/0CompactMem
+> https://github.com/soolaugust/vMem
 
 ---
 
@@ -44,19 +44,19 @@
 >
 > 这不是模型的问题，是记忆不该只住在 context window 里。
 >
-> 我做了 0CompactMem：
+> 我做了 vMem：
 > - 记忆持久化在 window 之外
 > - Compact 来了也不丢
 > - 关键约束可以 pin 死，永不被淘汰
 > - 多 agent 共享同一份记忆
 >
-> 一行装：`/install-plugin github:soolaugust/0CompactMem`
+> 一行装：`/install-plugin github:soolaugust/vMem`
 
 ---
 
 ## D. 技术细节版（适合 V2EX / 知乎正文 / Telegram 技术频道）
 
-> 0CompactMem —— 让 Claude Code 的 context compaction 变成不存在的问题
+> vMem —— 让 Claude Code 的 context compaction 变成不存在的问题
 >
 > 核心思路：记忆不该只住在 context window 里。把它搬出去，compact 就不是问题了。
 >
@@ -72,7 +72,7 @@
 >
 > 性能：检索 P50 0.1ms，跨 session 召回 94.2%，3500+ 测试。MIT。
 >
-> https://github.com/soolaugust/0CompactMem
+> https://github.com/soolaugust/vMem
 
 ---
 
@@ -91,18 +91,18 @@
 >
 > 怎么移？照搬 Linux 内核 40 年的经验：demand paging、kswapd 淘汰、mlock 钉死。
 >
-> 项目叫 0CompactMem，"0" 就是 Zero Compact 的意思。
+> 项目叫 vMem，就是给 LLM context 加一层 virtual memory。
 > 单文件 SQLite，MCP 原生，多 agent 共享。
 >
-> 一行装：`/install-plugin github:soolaugust/0CompactMem`
+> 一行装：`/install-plugin github:soolaugust/vMem`
 >
-> 仓库：https://github.com/soolaugust/0CompactMem
+> 仓库：https://github.com/soolaugust/vMem
 
 ---
 
 ## F. Reddit r/ClaudeAI 版（英文，但列在这里方便一起管理）
 
-> **Title**: I built 0CompactMem to fix my #1 frustration with Claude Code: context compaction
+> **Title**: I built vMem to fix my #1 frustration with Claude Code: context compaction
 >
 > **Body**:
 >
@@ -113,11 +113,11 @@
 > My fix: don't keep critical knowledge only in the context window. Persist it outside,
 > restore it on demand.
 >
-> 0CompactMem does this using OS memory-management principles (demand paging for
+> vMem does this using OS context-management principles (demand paging for
 > retrieval, mlock for pinning critical constraints, kswapd for smart eviction).
 > It runs as an MCP server inside Claude Code — one-line install:
 >
->     /install-plugin github:soolaugust/0CompactMem
+>     /install-plugin github:soolaugust/vMem
 >
 > Key results:
 > - Cross-session recall: 94.2%
@@ -127,8 +127,8 @@
 >
 > MIT, single SQLite file, no external service needed.
 >
-> Happy to answer questions. The name means "Zero Compact Memory" — because
-> compaction should be invisible.
+> Happy to answer questions. The name means virtual memory for LLM context —
+> because the context window should be managed, not treated as the whole world.
 
 ---
 
@@ -168,8 +168,8 @@
 |------|------|
 | claude code context compaction | claude code 上下文压缩 |
 | claude code memory loss | claude code 记忆丢失 |
-| llm agent persistent memory | AI agent 持久记忆 |
+| llm agent persistent context | AI agent 持久记忆 |
 | context window limit solution | 上下文窗口限制 解决方案 |
-| zero compaction ai memory | 零压缩 AI 记忆 |
+| OS-managed context ai memory | 零压缩 AI 记忆 |
 | mcp memory server | MCP 记忆服务器 |
 | multi agent shared memory | 多 agent 共享记忆 |
