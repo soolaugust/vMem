@@ -6,7 +6,7 @@ OS 类比：do_exit() → exit_mmap() — 进程退出时释放不再需要的�
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
-import tmpfs  # noqa: F401 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 测试隔离
 
 from hooks.extractor import _is_quality_chunk
 

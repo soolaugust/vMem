@@ -23,11 +23,11 @@ _MOS_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_MOS_ROOT))
 
 # Import from memory-os
-from store_core import (
+from memory_os.store.core import (
     checkpoint_dump, checkpoint_restore,
     swap_out, swap_in, open_db, ensure_schema
 )
-from utils import resolve_project_id
+from memory_os.core.utils import resolve_project_id
 
 
 class TmpfsDB:

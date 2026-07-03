@@ -7,16 +7,16 @@ test_iter515_userfaultfd.py — userfaultfd Demand-Paged Import 测试
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: E402, F401 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402, F401 — 测试隔离
 
 import json
 import time
 import pytest
 from datetime import datetime, timezone, timedelta
 
-from store_core import open_db, ensure_schema, insert_chunk, bump_chunk_version
-from store_mm import userfaultfd_promote
-from config import get as cfg
+from memory_os.store.core import open_db, ensure_schema, insert_chunk, bump_chunk_version
+from memory_os.store.mm import userfaultfd_promote
+from memory_os.config.sysctl import get as cfg
 
 
 @pytest.fixture

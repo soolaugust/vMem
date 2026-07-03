@@ -29,9 +29,9 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent / "hooks"))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store_vfs import ensure_schema, insert_chunk, classify_memory_type
+from memory_os.store.vfs_compat import ensure_schema, insert_chunk, classify_memory_type
 
 
 def _now_iso():
@@ -127,7 +127,7 @@ def test_causal_chain_with_temp_keyword_stays_episodic():
 
 def test_insert_chunk_decision_gets_semantic(conn):
     """新写入 decision chunk 时 info_class 应为 semantic（通过 store_vfs 路由）。"""
-    from store_vfs import insert_chunk as _insert
+    from memory_os.store.vfs_compat import insert_chunk as _insert
     chunk = _make_chunk("d1", "decision", "选择使用 FTS5 而非全量扫描", info_class="semantic")
     _insert(conn, chunk)
     conn.commit()
@@ -137,7 +137,7 @@ def test_insert_chunk_decision_gets_semantic(conn):
 
 def test_insert_chunk_causal_gets_episodic(conn):
     """新写入 causal_chain chunk 时 info_class 应为 episodic。"""
-    from store_vfs import insert_chunk as _insert
+    from memory_os.store.vfs_compat import insert_chunk as _insert
     chunk = _make_chunk("cc1", "causal_chain", "因为 A 导致了 B", info_class="episodic")
     _insert(conn, chunk)
     conn.commit()
@@ -151,7 +151,7 @@ def test_insert_chunk_causal_gets_episodic(conn):
 
 def test_backfill_dry_run_finds_candidates(conn):
     """backfill dry-run 能正确识别需要回填的 world chunks。"""
-    from store_vfs import insert_chunk as _insert
+    from memory_os.store.vfs_compat import insert_chunk as _insert
 
     # 写入几个 world info_class 的 chunk（模拟回填前状态）
     types_and_expected = [
@@ -181,7 +181,7 @@ def test_backfill_dry_run_finds_candidates(conn):
 
 def test_backfill_apply_updates_info_class(conn):
     """backfill apply 后 decision chunk 的 info_class 变为 semantic。"""
-    from store_vfs import insert_chunk as _insert
+    from memory_os.store.vfs_compat import insert_chunk as _insert
 
     # 强制写入 world info_class（绕过正常路由，模拟存量旧数据）
     chunk = _make_chunk("old1", "decision", "选择方案 X", info_class="world")

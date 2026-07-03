@@ -20,7 +20,7 @@ jobs:
         run: |
           python -m json.tool hooks/hooks.json >/dev/null
           python -m py_compile \
-            mcp_memory_lookup.py vmem_doctor.py production_assertions.py \
+            memory_os/cli/mcp_memory_lookup.py memory_os/cli/vmem_doctor.py memory_os/observability/production_assertions.py \
             hooks/context_governor.py hooks/prompt_budget_guard.py \
             hooks/retriever.py hooks/retriever_daemon.py
       - name: Unit and e2e tests
@@ -36,7 +36,7 @@ jobs:
           python benchmarks/production/runner.py --suite smoke --fail-under 85 --report /tmp/vmem-benchmark.json --markdown /tmp/vmem-benchmark.md
       - name: Doctor smoke
         run: |
-          MEMORY_OS_DIR=$(mktemp -d) python mcp_memory_lookup.py doctor --json
+          MEMORY_OS_DIR=$(mktemp -d) python -m memory_os.cli.mcp_memory_lookup doctor --json
       - name: Build and install wheel
         run: |
           python -m build --wheel --no-isolation
@@ -51,7 +51,7 @@ jobs:
           roots = [Path(p) for p in [
               "README.md", "README.zh.md", "llms.txt", "docs", "marketing", "paper/main.tex",
               "pyproject.toml", "glama.json", ".mcp.json", "hooks/hooks.json",
-              "vmem_doctor.py", "tests/test_vmem_doctor.py", "production_assertions.py", ".github/workflows/ci.yml",
+              "memory_os/cli/vmem_doctor.py", "tests/test_vmem_doctor.py", "memory_os/observability/production_assertions.py", ".github/workflows/ci.yml",
           ]]
           hits = []
           for root in roots:

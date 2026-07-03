@@ -11,7 +11,7 @@
 6. writer prompt_context 路径：新 topic → 正常写入
 7. prompt_context 去重不影响其他类型
 """
-import tmpfs  # 测试隔离（迭代54）
+import memory_os.runtime.tmpfs_compat as tmpfs  # 测试隔离（迭代54）
 
 import sys
 import json
@@ -24,7 +24,7 @@ sys.path.insert(0, str(_MOS_ROOT))
 _HOOKS_DIR = _MOS_ROOT / "hooks"
 sys.path.insert(0, str(_HOOKS_DIR))
 
-from store import open_db, ensure_schema, insert_chunk, already_exists, find_similar, merge_similar
+from memory_os.store.api import open_db, ensure_schema, insert_chunk, already_exists, find_similar, merge_similar
 
 
 def _make_chunk(summary: str, chunk_type: str = "prompt_context",

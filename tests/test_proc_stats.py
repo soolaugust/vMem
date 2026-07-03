@@ -23,12 +23,12 @@ os.environ["CLAUDE_CWD"] = "/tmp/test_proc"
 _ROOT = Path(__file__).parent
 sys.path.insert(0, str(_ROOT))
 
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
-from store import (open_db, ensure_schema, insert_chunk, proc_stats,
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+from memory_os.store.api import (open_db, ensure_schema, insert_chunk, proc_stats,
                    evict_lowest_retention, get_chunk_count, get_project_chunk_count,
                    insert_trace, update_accessed)
-from schema import MemoryChunk
-from scorer import retention_score as _retention_score
+from memory_os.core.schema import MemoryChunk
+from memory_os.core.scorer import retention_score as _retention_score
 
 _PASS = 0
 _FAIL = 0

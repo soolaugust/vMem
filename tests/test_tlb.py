@@ -17,7 +17,7 @@ v2 Multi-Slot + chunk_version 格式：
 9. prompt_hash 计算一致性
 10. TLB hit 时不应触发 FTS5 检索（功能逻辑验证）
 """
-import tmpfs  # 测试隔离（迭代54）
+import memory_os.runtime.tmpfs_compat as tmpfs  # 测试隔离（迭代54）
 
 import json
 import os

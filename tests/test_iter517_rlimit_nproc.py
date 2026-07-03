@@ -8,14 +8,14 @@ test_iter517_rlimit_nproc.py — RLIMIT_NPROC: Import Tombstone Registry
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: E402, F401 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402, F401 — 测试隔离
 
 import json
 import pytest
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
-from store_core import open_db, ensure_schema, insert_chunk, bump_chunk_version
+from memory_os.store.core import open_db, ensure_schema, insert_chunk, bump_chunk_version
 
 # import_knowledge 模块路径
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools"))
@@ -140,7 +140,7 @@ class TestKsmScanTombstone:
 
     def test_t9_ksm_registers_tombstone(self, conn):
         """T9: ksm_scan 合并删除的 import chunk 被注册到 tombstone。"""
-        from store_mm import ksm_scan
+        from memory_os.store.mm import ksm_scan
 
         # 创建一组可被 ksm_scan 合并的 chunks（相同 fingerprint 前缀）
         for i in range(5):
@@ -168,7 +168,7 @@ class TestOvercommitKillTombstone:
 
     def test_t10_overcommit_registers_tombstone(self, conn):
         """T10: overcommit_kill 删除的 import chunk 被注册到 tombstone。"""
-        from store_mm import overcommit_kill
+        from memory_os.store.mm import overcommit_kill
 
         # 创建大量零访问 global import chunks
         for i in range(40):
@@ -192,7 +192,7 @@ class TestMadvFreeTombstone:
 
     def test_t11_madv_free_registers_tombstone(self, conn):
         """T11: madv_free_scan 删除的 import chunk 被注册到 tombstone。"""
-        from store_mm import madv_free_scan
+        from memory_os.store.mm import madv_free_scan
 
         # 创建超过 delete_age_days（21天）的 import chunk
         old_created = (datetime.now(timezone.utc) - timedelta(days=25)).isoformat()
@@ -278,7 +278,7 @@ class TestDeletePathCoverage:
         """T15: oom_reaper 删除路径注册 tombstone（代码检查）。"""
         # 通过 grep 验证代码路径存在（静态检查）
         import inspect
-        from store_vfs import oom_reaper
+        from memory_os.store.vfs_compat import oom_reaper
         source = inspect.getsource(oom_reaper)
         assert "register_import_tombstones" in source, \
             "oom_reaper must call register_import_tombstones"
@@ -286,7 +286,7 @@ class TestDeletePathCoverage:
     def test_t16_shrink_dcache_tombstone(self, conn):
         """T16: shrink_dcache 删除路径注册 tombstone（代码检查）。"""
         import inspect
-        from store_vfs import shrink_dcache
+        from memory_os.store.vfs_compat import shrink_dcache
         source = inspect.getsource(shrink_dcache)
         assert "register_import_tombstones" in source, \
             "shrink_dcache must call register_import_tombstones"
@@ -294,7 +294,7 @@ class TestDeletePathCoverage:
     def test_t17_ksm_scan_tombstone(self, conn):
         """T17: ksm_scan 删除路径注册 tombstone（代码检查）。"""
         import inspect
-        from store_mm import ksm_scan
+        from memory_os.store.mm import ksm_scan
         source = inspect.getsource(ksm_scan)
         assert "register_import_tombstones" in source, \
             "ksm_scan must call register_import_tombstones"
@@ -302,7 +302,7 @@ class TestDeletePathCoverage:
     def test_t18_overcommit_kill_tombstone(self, conn):
         """T18: overcommit_kill 删除路径注册 tombstone（代码检查）。"""
         import inspect
-        from store_mm import overcommit_kill
+        from memory_os.store.mm import overcommit_kill
         source = inspect.getsource(overcommit_kill)
         assert "register_import_tombstones" in source, \
             "overcommit_kill must call register_import_tombstones"
@@ -310,7 +310,7 @@ class TestDeletePathCoverage:
     def test_t19_madv_free_tombstone(self, conn):
         """T19: madv_free_scan 删除路径注册 tombstone（代码检查）。"""
         import inspect
-        from store_mm import madv_free_scan
+        from memory_os.store.mm import madv_free_scan
         source = inspect.getsource(madv_free_scan)
         assert "register_import_tombstones" in source, \
             "madv_free_scan must call register_import_tombstones"

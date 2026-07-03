@@ -32,7 +32,7 @@ _ROOT = os.path.dirname(os.path.abspath(__file__))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from store_vfs import (
+from memory_os.store.vfs_compat import (
     open_db, ensure_schema,
     enqueue_curiosity, pop_curiosity_queue,
 )

@@ -11,10 +11,10 @@ import sqlite3
 from pathlib import Path
 
 # tmpfs 隔离
-import tmpfs
+import memory_os.runtime.tmpfs_compat as tmpfs
 
 sys.path.insert(0, str(Path(__file__).parent))
-from store import open_db, ensure_schema
+from memory_os.store.api import open_db, ensure_schema
 
 
 if __name__ == "__main__":
@@ -153,7 +153,7 @@ if __name__ == "__main__":
 
     # === T5: dmesg 日志记录 elapsed_ms ===
     print("\nT5: dmesg swap_out 记录 elapsed_ms")
-    from store import dmesg_log, dmesg_read, DMESG_INFO
+    from memory_os.store.api import dmesg_log, dmesg_read, DMESG_INFO
     dmesg_log(conn, DMESG_INFO, "swap_out",
               "PreCompact swap out: 6 hit_ids, 10 decisions, 3 transcript_turns, 145ms",
               extra={"session": "test", "has_transcript": True, "elapsed_ms": 145.2})

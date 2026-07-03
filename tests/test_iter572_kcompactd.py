@@ -16,10 +16,10 @@ ROOT = str(Path(__file__).resolve().parent.parent)
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-import tmpfs  # 测试隔离
-from store_core import open_db, ensure_schema, STORE_DB
-from store_mm import kcompactd
-import config
+import memory_os.runtime.tmpfs_compat as tmpfs  # 测试隔离
+from memory_os.store.core import open_db, ensure_schema, STORE_DB
+from memory_os.store.mm import kcompactd
+import memory_os.config.sysctl as config
 
 
 def _set_override(key, value):

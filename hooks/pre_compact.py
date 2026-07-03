@@ -25,7 +25,7 @@ def _resolve_project() -> str:
     if proj:
         return proj
     try:
-        from utils import resolve_project_id
+        from memory_os.core.utils import resolve_project_id
         return resolve_project_id()
     except Exception:
         return "unknown"
@@ -33,7 +33,7 @@ def _resolve_project() -> str:
 
 def _open_db_readonly() -> sqlite3.Connection:
     """只读打开 store.db。"""
-    from store_vfs import open_db, DB_PATH
+    from memory_os.store.vfs_compat import open_db, DB_PATH
     db_path = os.environ.get("MEMORY_OS_DB", DB_PATH)
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.execute("PRAGMA journal_mode=WAL")
@@ -48,7 +48,7 @@ def _collect_critical_chunks(conn: sqlite3.Connection, project: str,
 
     优先级：hard-pinned > recent decisions。去重：pinned 中已有的 decision 不重复。
     """
-    from store_vfs import get_pinned_chunks
+    from memory_os.store.vfs_compat import get_pinned_chunks
 
     parts = []
     seen_ids = set()
@@ -93,7 +93,7 @@ def _collect_critical_chunks(conn: sqlite3.Connection, project: str,
 def main():
     """PreCompact hook 入口。"""
     try:
-        from config import get
+        from memory_os.config.sysctl import get
         if not get("precompact.enabled"):
             print(json.dumps({}))
             return

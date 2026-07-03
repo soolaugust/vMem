@@ -5,7 +5,7 @@ test_mount_walk.py — 迭代81: VFS Mount Point Resolution 测试
 OS 类比：Linux VFS lookup_mnt() — 从子目录 CWD 向上遍历找到正确的 project_id
 验证 save-task-state.py 和 resume-task-state.py 的 mount walk 修复
 """
-import tmpfs  # noqa: F401 — must be first to isolate test DB
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — must be first to isolate test DB
 
 import json
 import os
@@ -21,8 +21,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 _HOOKS_DIR = Path.home() / ".claude" / "hooks"
 sys.path.insert(0, str(_HOOKS_DIR))
 
-from store import open_db, ensure_schema
-from utils import resolve_project_id
+from memory_os.store.api import open_db, ensure_schema
+from memory_os.core.utils import resolve_project_id
 
 
 def _setup_test_db_with_project(project_id, n_chunks=5, n_traces=3):
@@ -280,7 +280,7 @@ class TestSwapIntegrationWithMountWalk(unittest.TestCase):
         spec.loader.exec_module(mod)
 
         # Patch STORE_DB to use test DB (same path as store.open_db uses)
-        from store import STORE_DB as store_db_path
+        from memory_os.store.api import STORE_DB as store_db_path
         mod.STORE_DB = Path(store_db_path)
         mod.LATEST_JSON = Path(self.tmpdir) / "latest.json"  # non-existent
         mod.MEMORY_OS_DIR = mod.STORE_DB.parent

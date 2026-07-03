@@ -11,7 +11,7 @@
 ### 基本用法
 
 ```python
-from vfs import get_vfs
+from memory_os.vfs.api import get_vfs
 
 # 获取全局 VFS 实例
 vfs = get_vfs()
@@ -33,7 +33,7 @@ if item:
 
 ```python
 # 替换原有的 BM25 搜索
-from vfs import get_vfs
+from memory_os.vfs.api import get_vfs
 
 def _search_knowledge(query: str, top_k: int = 5) -> List[dict]:
     """使用 VFS 统一搜索"""

@@ -25,6 +25,18 @@ DEFAULT_PRESSURE_MAX_AGE_SECS = 600
 RESCUE_COMMANDS = frozenset({"/clear", "/compact"})
 PRESSURE_LEVELS = frozenset({"high", "critical"})
 
+CONTEXT_MODE_STATE_FILE = MEMORY_OS_DIR / "context_mode_state.json"
+WORKING_SET_FILE = MEMORY_OS_DIR / "working_set" / "current.json"
+DEFAULT_WORKING_SET_MAX_AGE_SECS = 1800
+
+
+@dataclass(frozen=True)
+class ContextModeState:
+    mode: str
+    last_seen_at: str
+    age_secs: float
+    active: bool
+    reason: str = ""
 
 @dataclass(frozen=True)
 class PressureState:
@@ -141,4 +153,172 @@ def should_shed_optional_context(
     """Return True when optional additionalContext producers should stay silent."""
     if data is not None and is_rescue_command(prompt_text(data)):
         return False
+    if read_context_mode(max_age_secs=max_age_secs).active:
+        return True
     return read_pressure_state(state_file=state_file, max_age_secs=max_age_secs).active
+
+def write_context_mode(
+    mode: str,
+    reason: str,
+    state_file: Path | None = None,
+) -> None:
+    """Persist context-kernel mode so all context producers share one state."""
+    normalized = mode.lower().strip()
+    if normalized not in {"normal", "pressure", "working_set"}:
+        normalized = "normal"
+    path = state_file or CONTEXT_MODE_STATE_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "mode": normalized,
+                "last_seen_at": datetime.now(timezone.utc).isoformat(),
+                "reason": reason,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+def read_context_mode(
+    state_file: Path | None = None,
+    max_age_secs: int | None = None,
+) -> ContextModeState:
+    path = state_file or CONTEXT_MODE_STATE_FILE
+    max_age = max_age_secs or int(os.environ.get(
+        "MEMORY_OS_CONTEXT_MODE_MAX_AGE_SECS",
+        str(DEFAULT_WORKING_SET_MAX_AGE_SECS),
+    ))
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return ContextModeState(mode="", last_seen_at="", age_secs=float("inf"), active=False)
+    if not isinstance(state, dict):
+        return ContextModeState(mode="", last_seen_at="", age_secs=float("inf"), active=False)
+    mode = str(state.get("mode", "")).lower()
+    last_seen_at = str(state.get("last_seen_at", ""))
+    seen_ts = _parse_timestamp(last_seen_at)
+    if seen_ts is None:
+        return ContextModeState(mode=mode, last_seen_at=last_seen_at, age_secs=float("inf"), active=False, reason=str(state.get("reason", "")))
+    age = max(0.0, time.time() - seen_ts)
+    return ContextModeState(
+        mode=mode,
+        last_seen_at=last_seen_at,
+        age_secs=age,
+        active=mode in {"pressure", "working_set"} and age <= max_age,
+        reason=str(state.get("reason", "")),
+    )
+
+
+def _content_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        item_type = item.get("type")
+        if item_type == "text":
+            parts.append(str(item.get("text", "")))
+        elif item_type == "tool_use":
+            name = item.get("name", "tool")
+            parts.append(f"[tool_use:{name}]")
+        elif item_type == "tool_result":
+            text = _content_text(item.get("content", ""))
+            if text:
+                parts.append(f"[tool_result:{text[:240]}]")
+    return "\n".join(part for part in parts if part)
+
+
+def _tail_lines(path: Path, max_bytes: int) -> list[str]:
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return []
+    start = max(0, size - max_bytes)
+    try:
+        with path.open("rb") as f:
+            if start:
+                f.seek(start)
+                f.readline()
+            raw = f.read()
+    except OSError:
+        return []
+    return raw.decode("utf-8", errors="replace").splitlines()
+
+
+def build_working_set_from_transcript(
+    prompt: str,
+    transcript_path: Path | None,
+    *,
+    max_tail_bytes: int = 512_000,
+    max_items: int = 24,
+) -> dict[str, Any]:
+    """Build a deterministic active working set instead of retaining raw history."""
+    messages: list[dict[str, str]] = []
+    tool_refs: list[dict[str, str]] = []
+    if transcript_path and transcript_path.exists():
+        for line in _tail_lines(transcript_path, max_tail_bytes):
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            message = entry.get("message") if isinstance(entry, dict) else None
+            if not isinstance(message, dict):
+                continue
+            role = str(message.get("role", ""))
+            text = _content_text(message.get("content", "")).strip()
+            if not text:
+                continue
+            if "[tool_result:" in text or "[tool_use:" in text:
+                tool_refs.append({"role": role, "summary": text[:300]})
+            else:
+                messages.append({"role": role, "text": text[:800]})
+    recent = messages[-max_items:]
+    latest_user = next((m["text"] for m in reversed(recent) if m["role"] == "user"), "")
+    return {
+        "schema_version": 1,
+        "mode": "working_set",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "current_prompt": prompt[:1200],
+        "latest_user_goal": latest_user[:800] if latest_user else prompt[:800],
+        "recent_messages": recent,
+        "tool_evidence_refs": tool_refs[-12:],
+        "policy": {
+            "resident": "active working set only",
+            "swapped": "raw transcript/tool output remains addressable via transcript_path and context pages",
+            "optional_context": "shed while working_set mode is active",
+        },
+        "transcript_path": str(transcript_path) if transcript_path else "",
+    }
+
+
+def write_working_set(
+    prompt: str,
+    transcript_path: Path | None,
+    *,
+    working_set_file: Path | None = None,
+) -> dict[str, Any]:
+    path = working_set_file or WORKING_SET_FILE
+    working_set = build_working_set_from_transcript(prompt, transcript_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(working_set, ensure_ascii=False, indent=2), encoding="utf-8")
+    return working_set
+
+
+def format_working_set_notice(working_set: dict[str, Any], *, max_chars: int = 1200) -> str:
+    recent = working_set.get("recent_messages", [])
+    recent_count = len(recent) if isinstance(recent, list) else 0
+    tool_refs = working_set.get("tool_evidence_refs", [])
+    tool_count = len(tool_refs) if isinstance(tool_refs, list) else 0
+    text = (
+        "[context_kernel] 已自动进入 working-set 模式：系统将压制可选上下文注入，"
+        "只保留当前目标/近期决策/证据索引，原始 transcript 与工具输出作为可寻址证据留在本地。\n"
+        f"working_set={WORKING_SET_FILE} recent_messages={recent_count} tool_refs={tool_count}\n"
+        f"latest_goal={str(working_set.get('latest_user_goal', ''))[:360]}"
+    )
+    return text[:max_chars]
+

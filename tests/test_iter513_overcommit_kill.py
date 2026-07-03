@@ -15,15 +15,15 @@ from pathlib import Path
 
 # tmpfs 隔离（必须在 store import 前）
 sys.path.insert(0, str(Path(__file__).parent.parent))
-import tmpfs  # noqa: F401, E402
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401, E402
 
 import json
 import sqlite3
 import uuid
 from datetime import datetime, timezone
 
-from store import open_db, ensure_schema
-from store_mm import overcommit_kill
+from memory_os.store.api import open_db, ensure_schema
+from memory_os.store.mm import overcommit_kill
 
 
 def _make_chunk(conn, project="global", chunk_type="decision",

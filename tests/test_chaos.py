@@ -45,10 +45,10 @@ def db_env(tmp_path, monkeypatch):
 
 def _make_db(db_path: Path):
     """创建最小可用的 store.db 并返回连接。"""
-    from store import open_db, ensure_schema
+    from memory_os.store.api import open_db, ensure_schema
     # 临时覆盖 STORE_DB
-    import store as _store
-    import store_core as _core
+    import memory_os.store.api as _store
+    import memory_os.store.core as _core
     _store.STORE_DB = db_path
     _core.STORE_DB = db_path
     conn = sqlite3.connect(str(db_path))
@@ -68,12 +68,12 @@ class TestDbBackupRestore:
         """watchdog_check 首次运行时应创建当日备份。"""
         db_dir, db_path = db_env
         conn = _make_db(db_path)
-        import store_core as _core
+        import memory_os.store.core as _core
         _core.STORE_DB = db_path
         _core.MEMORY_OS_DIR = db_dir
 
-        from store_mm import watchdog_check
-        import store_mm as _mm
+        from memory_os.store.mm import watchdog_check
+        import memory_os.store.mm as _mm
         _mm.STORE_DB = db_path
         _mm.MEMORY_OS_DIR = db_dir
 
@@ -93,14 +93,14 @@ class TestDbBackupRestore:
         """同一天调用两次 watchdog_check，备份只创建一次。"""
         db_dir, db_path = db_env
         conn = _make_db(db_path)
-        import store_mm as _mm
-        import store_core as _core
+        import memory_os.store.mm as _mm
+        import memory_os.store.core as _core
         _mm.STORE_DB = db_path
         _mm.MEMORY_OS_DIR = db_dir
         _core.STORE_DB = db_path
         _core.MEMORY_OS_DIR = db_dir
 
-        from store_mm import watchdog_check
+        from memory_os.store.mm import watchdog_check
         result1 = watchdog_check(conn)
         result2 = watchdog_check(conn)
         conn.close()
@@ -117,8 +117,8 @@ class TestDbBackupRestore:
         """integrity_check 失败时应从最新备份恢复。"""
         db_dir, db_path = db_env
         conn = _make_db(db_path)
-        import store_mm as _mm
-        import store_core as _core
+        import memory_os.store.mm as _mm
+        import memory_os.store.core as _core
         _mm.STORE_DB = db_path
         _mm.MEMORY_OS_DIR = db_dir
         _core.STORE_DB = db_path
@@ -140,7 +140,7 @@ class TestDbBackupRestore:
         db_path.write_bytes(b"CORRUPTED_SQLITE_GARBAGE_DATA" * 100)
 
         # 调用 restore_from_backup 直接
-        from store_mm import _watchdog_restore_from_backup
+        from memory_os.store.mm import _watchdog_restore_from_backup
         checks_list, repairs_list = [], []
         restored = _watchdog_restore_from_backup(checks_list, repairs_list)
 
@@ -165,14 +165,14 @@ class TestFTS5ResiliencePath:
         """FTS5 integrity-check 失败时 watchdog 应自动 rebuild。"""
         db_dir, db_path = db_env
         conn = _make_db(db_path)
-        import store_mm as _mm
-        import store_core as _core
+        import memory_os.store.mm as _mm
+        import memory_os.store.core as _core
         _mm.STORE_DB = db_path
         _mm.MEMORY_OS_DIR = db_dir
         _core.STORE_DB = db_path
         _core.MEMORY_OS_DIR = db_dir
 
-        from store_mm import watchdog_check
+        from memory_os.store.mm import watchdog_check
 
         # 直接写入主表绕过触发器（模拟 FTS5 不同步）
         conn.execute(
@@ -195,14 +195,14 @@ class TestFTS5ResiliencePath:
         """FTS5 rebuild 失败时 watchdog 应降级为 DEGRADED 但不崩溃。"""
         db_dir, db_path = db_env
         conn = _make_db(db_path)
-        import store_mm as _mm
-        import store_core as _core
+        import memory_os.store.mm as _mm
+        import memory_os.store.core as _core
         _mm.STORE_DB = db_path
         _mm.MEMORY_OS_DIR = db_dir
         _core.STORE_DB = db_path
         _core.MEMORY_OS_DIR = db_dir
 
-        from store_mm import watchdog_check
+        from memory_os.store.mm import watchdog_check
 
         # 模拟 FTS5 rebuild 失败：monkeypatch store_mm 模块中的 conn.execute 调用
         # sqlite3.Connection.execute 是只读属性，无法直接 monkey-patch，
@@ -250,15 +250,15 @@ class TestDmesgAlertDeduplication:
         """连续两次 watchdog_check 检测到 elevated ERR，第二次不应重复写入告警。"""
         db_dir, db_path = db_env
         conn = _make_db(db_path)
-        import store_mm as _mm
-        import store_core as _core
+        import memory_os.store.mm as _mm
+        import memory_os.store.core as _core
         _mm.STORE_DB = db_path
         _mm.MEMORY_OS_DIR = db_dir
         _core.STORE_DB = db_path
         _core.MEMORY_OS_DIR = db_dir
 
-        from store_core import dmesg_log, DMESG_ERR
-        from store_mm import watchdog_check
+        from memory_os.store.core import dmesg_log, DMESG_ERR
+        from memory_os.store.mm import watchdog_check
 
         # 写入 11 条 ERR（超过阈值 10）
         for i in range(11):
@@ -297,14 +297,14 @@ class TestCRIUVersionCheck:
         """checkpoint_dump 保存的快照应包含 content_hash 字段。"""
         db_dir, db_path = db_env
         conn = _make_db(db_path)
-        import store as _store
-        import store_core as _core
+        import memory_os.store.api as _store
+        import memory_os.store.core as _core
         _store.STORE_DB = db_path
         _core.STORE_DB = db_path
 
-        from store import insert_chunk, ensure_schema
-        from store_criu import checkpoint_dump, checkpoint_restore
-        from schema import MemoryChunk
+        from memory_os.store.api import insert_chunk, ensure_schema
+        from memory_os.store.criu import checkpoint_dump, checkpoint_restore
+        from memory_os.core.schema import MemoryChunk
 
         ensure_schema(conn)
         # 插入一个 chunk
@@ -338,14 +338,14 @@ class TestCRIUVersionCheck:
         """chunk content 更新后，restore 应将对应 chunk 标记为 _snapshot_stale=True。"""
         db_dir, db_path = db_env
         conn = _make_db(db_path)
-        import store as _store
-        import store_core as _core
+        import memory_os.store.api as _store
+        import memory_os.store.core as _core
         _store.STORE_DB = db_path
         _core.STORE_DB = db_path
 
-        from store import insert_chunk, ensure_schema
-        from store_criu import checkpoint_dump, checkpoint_restore
-        from schema import MemoryChunk
+        from memory_os.store.api import insert_chunk, ensure_schema
+        from memory_os.store.criu import checkpoint_dump, checkpoint_restore
+        from memory_os.core.schema import MemoryChunk
 
         ensure_schema(conn)
         chunk = MemoryChunk(project="test-proj", chunk_type="decision",
@@ -387,14 +387,14 @@ class TestSessionIntentSoftPin:
         """extractor 保存 intent 时，shadow_trace 中的 chunk 应被 soft-pin。"""
         db_dir, db_path = db_env
         conn = _make_db(db_path)
-        import store as _store
-        import store_core as _core
+        import memory_os.store.api as _store
+        import memory_os.store.core as _core
         _store.STORE_DB = db_path
         _core.STORE_DB = db_path
 
-        from store import insert_chunk, ensure_schema
-        from store_vfs import pin_chunk
-        from schema import MemoryChunk
+        from memory_os.store.api import insert_chunk, ensure_schema
+        from memory_os.store.vfs_compat import pin_chunk
+        from memory_os.core.schema import MemoryChunk
 
         ensure_schema(conn)
         # 插入测试 chunk

@@ -29,8 +29,8 @@ import os
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-import tmpfs
-from store_core import ensure_schema, open_db
+import memory_os.runtime.tmpfs_compat as tmpfs
+from memory_os.store.core import ensure_schema, open_db
 
 def populate_test_data(conn):
     """构造测试数据集：模拟 10 轮对话的知识积累"""

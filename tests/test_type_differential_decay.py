@@ -19,7 +19,7 @@ def _imp_with_decay(imp, days_ago, chunk_type="", decay_rate_override=None):
     """
     直接测试 importance_with_decay 的逻辑（独立于 config.py，通过 mock）。
     """
-    from scorer import importance_with_decay
+    from memory_os.core.scorer import importance_with_decay
     from datetime import datetime, timezone, timedelta
     last_accessed = (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat()
 
@@ -74,7 +74,7 @@ def test_td2_decay_difference_significant_at_30_days():
 def test_td3_empty_chunk_type_uses_global_decay():
     """chunk_type='' 时使用全局 decay_rate=0.95"""
     from datetime import datetime, timezone, timedelta
-    from scorer import importance_with_decay
+    from memory_os.core.scorer import importance_with_decay
 
     def mock_sysctl(key):
         return {"scorer.importance_decay_rate": 0.95,
@@ -93,7 +93,7 @@ def test_td3_empty_chunk_type_uses_global_decay():
 def test_td4_unknown_chunk_type_fallback():
     """未知 chunk_type 也使用全局 decay_rate"""
     from datetime import datetime, timezone, timedelta
-    from scorer import importance_with_decay
+    from memory_os.core.scorer import importance_with_decay
 
     def mock_sysctl(key):
         return {"scorer.importance_decay_rate": 0.95,

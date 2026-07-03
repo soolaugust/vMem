@@ -16,11 +16,11 @@ os.environ["MEMORY_OS_DB"] = os.path.join(_tmpdir, "test.db")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from store import open_db, ensure_schema, insert_chunk
-from store_mm import (page_idle_mark, page_idle_clear, page_idle_scan,
+from memory_os.store.api import open_db, ensure_schema, insert_chunk
+from memory_os.store.mm import (page_idle_mark, page_idle_clear, page_idle_scan,
                       _page_idle_load, _page_idle_save, _PAGE_IDLE_FILE,
                       MEMORY_OS_DIR)
-from schema import MemoryChunk
+from memory_os.core.schema import MemoryChunk
 import pytest
 
 

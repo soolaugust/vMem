@@ -7,7 +7,7 @@
 2. PSI 延迟采样排除 hard_deadline trace（不代表正常检索延迟）
 3. FTS5 截断后性能验证（query 长度 vs 延迟的因果关系）
 """
-import tmpfs  # 测试隔离：临时目录 + 环境变量覆盖
+import memory_os.runtime.tmpfs_compat as tmpfs  # 测试隔离：临时目录 + 环境变量覆盖
 
 import sys
 import os
@@ -18,8 +18,8 @@ import sqlite3
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "hooks"))
 
-import store
-import config
+import memory_os.store.api as store
+import memory_os.config.sysctl as config
 from hooks.retriever import _build_query, _extract_key_entities
 
 

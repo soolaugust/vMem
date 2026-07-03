@@ -22,9 +22,9 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store import open_db, ensure_schema
+from memory_os.store.api import open_db, ensure_schema
 from tools.citation_detector import (
     _update_chunk_confidence,
     CITED_CONFIDENCE_DELTA,

@@ -12,7 +12,7 @@ OS 类比：Linux NUMA node distance matrix 验证
   4. global tier 的轻微惩罚符合"共享 NUMA node"语义
 """
 import pytest
-from scorer import retrieval_score, numa_distance_penalty
+from memory_os.core.scorer import retrieval_score, numa_distance_penalty
 
 
 # ── 1. Penalty Matrix ────────────────────────────────────────────────────────

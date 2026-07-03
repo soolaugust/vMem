@@ -15,7 +15,7 @@ from pathlib import Path
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
 
-from store import open_db, ensure_schema
+from memory_os.store.api import open_db, ensure_schema
 
 
 def purge(execute: bool = False):

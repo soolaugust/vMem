@@ -8,7 +8,7 @@ OS 类比：Linux pipe(2) SIGPIPE — 管道读端关闭时 kill 写端，防止
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: F401 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 测试隔离
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hooks"))
 
 from extractor import _extract_quantitative_conclusions, _is_fragment, _is_quality_chunk

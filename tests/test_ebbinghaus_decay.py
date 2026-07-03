@@ -20,9 +20,9 @@ from datetime import datetime, timezone, timedelta
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store import open_db, ensure_schema
+from memory_os.store.api import open_db, ensure_schema
 
 
 def _insert_chunk(conn, cid, project, summary, importance=0.6, stability=1.0,
@@ -48,7 +48,7 @@ def test_eb1_long_absent_chunk_decays():
     conn = open_db()
     ensure_schema(conn)
 
-    from store_mm import apply_ebbinghaus_decay
+    from memory_os.store.mm import apply_ebbinghaus_decay
 
     proj = f"eb1_{uuid.uuid4().hex[:6]}"
     cid = f"eb1c_{uuid.uuid4().hex[:10]}"
@@ -85,7 +85,7 @@ def test_eb2_recent_chunk_not_decayed():
     conn = open_db()
     ensure_schema(conn)
 
-    from store_mm import apply_ebbinghaus_decay
+    from memory_os.store.mm import apply_ebbinghaus_decay
 
     proj = f"eb2_{uuid.uuid4().hex[:6]}"
     cid = f"eb2c_{uuid.uuid4().hex[:10]}"
@@ -116,7 +116,7 @@ def test_eb3_high_stability_decays_slower():
     conn = open_db()
     ensure_schema(conn)
 
-    from store_mm import apply_ebbinghaus_decay
+    from memory_os.store.mm import apply_ebbinghaus_decay
 
     proj = f"eb3_{uuid.uuid4().hex[:6]}"
     cid_slow = f"eb3s_{uuid.uuid4().hex[:10]}"
@@ -162,7 +162,7 @@ def test_eb4_pinned_chunk_not_decayed():
     conn = open_db()
     ensure_schema(conn)
 
-    from store_mm import apply_ebbinghaus_decay
+    from memory_os.store.mm import apply_ebbinghaus_decay
 
     proj = f"eb4_{uuid.uuid4().hex[:6]}"
     cid = f"eb4c_{uuid.uuid4().hex[:10]}"
@@ -193,7 +193,7 @@ def test_eb5_skip_citation_types():
     conn = open_db()
     ensure_schema(conn)
 
-    from store_mm import apply_ebbinghaus_decay
+    from memory_os.store.mm import apply_ebbinghaus_decay
 
     proj = f"eb5_{uuid.uuid4().hex[:6]}"
     cid = f"eb5c_{uuid.uuid4().hex[:10]}"
@@ -224,7 +224,7 @@ def test_eb6_floor_protection():
     conn = open_db()
     ensure_schema(conn)
 
-    from store_mm import apply_ebbinghaus_decay
+    from memory_os.store.mm import apply_ebbinghaus_decay
 
     proj = f"eb6_{uuid.uuid4().hex[:6]}"
     cid = f"eb6c_{uuid.uuid4().hex[:10]}"
@@ -255,7 +255,7 @@ def test_eb7_high_stability_floor_protection():
     conn = open_db()
     ensure_schema(conn)
 
-    from store_mm import apply_ebbinghaus_decay
+    from memory_os.store.mm import apply_ebbinghaus_decay
 
     proj = f"eb7_{uuid.uuid4().hex[:6]}"
     # 高稳定 chunk（stability=10，长期未访问）

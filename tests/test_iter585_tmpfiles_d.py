@@ -35,7 +35,7 @@ def _stub_get(key, default=None):
 @pytest.fixture(autouse=True)
 def _patch_config(monkeypatch):
     _sysctl_overrides.clear()
-    import config
+    import memory_os.config.sysctl as config
     monkeypatch.setattr(config, "get", _stub_get)
     yield
     _sysctl_overrides.clear()
@@ -68,7 +68,7 @@ def _exists(path):
 class TestShadowTraceCleanup:
     def test_removes_old_shadow_trace(self, tmp_mem_dir):
         """超过 max_age 的 per-session shadow_trace 被清理。"""
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         old_file = os.path.join(tmp_mem_dir, ".shadow_trace.abc12345def67890.json")
         _touch(old_file, age_hours=48)
         result = tmpfiles_d(mem_dir=tmp_mem_dir)
@@ -78,7 +78,7 @@ class TestShadowTraceCleanup:
 
     def test_keeps_recent_shadow_trace(self, tmp_mem_dir):
         """未过期的 per-session shadow_trace 不被清理。"""
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         new_file = os.path.join(tmp_mem_dir, ".shadow_trace.recent12345678.json")
         _touch(new_file, age_hours=1)
         result = tmpfiles_d(mem_dir=tmp_mem_dir)
@@ -87,7 +87,7 @@ class TestShadowTraceCleanup:
 
     def test_preserves_global_shadow_trace(self, tmp_mem_dir):
         """全局 .shadow_trace.json 不被清理（retriever 使用）。"""
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         global_file = os.path.join(tmp_mem_dir, ".shadow_trace.json")
         _touch(global_file, age_hours=48)
         result = tmpfiles_d(mem_dir=tmp_mem_dir)
@@ -96,7 +96,7 @@ class TestShadowTraceCleanup:
 
     def test_multiple_shadow_traces(self, tmp_mem_dir):
         """批量清理多个过期 shadow_trace。"""
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         for i in range(10):
             _touch(os.path.join(tmp_mem_dir, f".shadow_trace.session{i:08d}.json"), age_hours=48)
         # 保留 2 个新的
@@ -116,7 +116,7 @@ class TestShadowTraceCleanup:
 class TestPageFaultLogCleanup:
     def test_removes_old_page_fault_log(self, tmp_mem_dir):
         """过期的 per-session page_fault_log 被清理。"""
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         old_file = os.path.join(tmp_mem_dir, "page_fault_log.abc12345.json")
         _touch(old_file, age_hours=48)
         result = tmpfiles_d(mem_dir=tmp_mem_dir)
@@ -125,7 +125,7 @@ class TestPageFaultLogCleanup:
 
     def test_preserves_global_page_fault_log(self, tmp_mem_dir):
         """全局 page_fault_log.json 不被清理。"""
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         global_file = os.path.join(tmp_mem_dir, "page_fault_log.json")
         _touch(global_file, age_hours=48)
         result = tmpfiles_d(mem_dir=tmp_mem_dir)
@@ -140,7 +140,7 @@ class TestPageFaultLogCleanup:
 class TestCitationStatsCleanup:
     def test_removes_old_citation_stats(self, tmp_mem_dir):
         """过期的 citation_stats 缓存文件被清理。"""
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         for suffix in ["cc1_abc123", "sm1_def456", "sas_h_789abc"]:
             _touch(os.path.join(tmp_mem_dir, f"citation_stats.{suffix}.json"), age_hours=48)
         result = tmpfiles_d(mem_dir=tmp_mem_dir)
@@ -148,7 +148,7 @@ class TestCitationStatsCleanup:
 
     def test_keeps_recent_citation_stats(self, tmp_mem_dir):
         """未过期的 citation_stats 不被清理。"""
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         _touch(os.path.join(tmp_mem_dir, "citation_stats.fresh_one.json"), age_hours=1)
         result = tmpfiles_d(mem_dir=tmp_mem_dir)
         assert result["cleaned"]["citation_stats"] == 0
@@ -161,14 +161,14 @@ class TestCitationStatsCleanup:
 class TestCtxPressureCleanup:
     def test_removes_old_ctx_pressure(self, tmp_mem_dir):
         """过期的 per-session ctx_pressure_state 被清理。"""
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         _touch(os.path.join(tmp_mem_dir, "ctx_pressure_state.abc12345.json"), age_hours=48)
         result = tmpfiles_d(mem_dir=tmp_mem_dir)
         assert result["cleaned"]["ctx_pressure"] == 1
 
     def test_preserves_global_ctx_pressure(self, tmp_mem_dir):
         """全局 ctx_pressure_state.json 不被清理。"""
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         _touch(os.path.join(tmp_mem_dir, "ctx_pressure_state.json"), age_hours=48)
         result = tmpfiles_d(mem_dir=tmp_mem_dir)
         assert result["cleaned"]["ctx_pressure"] == 0
@@ -182,7 +182,7 @@ class TestColdSyncTruncation:
     def test_truncates_cold_sync(self, tmp_mem_dir):
         """超过 max_entries 的 cold_sync_state 被截断到最新 N 条。"""
         _sysctl_overrides["tmpfiles_d.max_cold_sync_entries"] = 5
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         data = {}
         for i in range(20):
             data[f"chunk-{i:04d}"] = {
@@ -204,7 +204,7 @@ class TestColdSyncTruncation:
     def test_cold_sync_within_limit(self, tmp_mem_dir):
         """cold_sync 条目数在限制内时不截断。"""
         _sysctl_overrides["tmpfiles_d.max_cold_sync_entries"] = 200
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         data = {f"chunk-{i}": {"synced_at": "2026-04-01T00:00:00+00:00"} for i in range(10)}
         cold_path = os.path.join(tmp_mem_dir, "cold_sync_state.json")
         with open(cold_path, "w") as f:
@@ -214,7 +214,7 @@ class TestColdSyncTruncation:
 
     def test_cold_sync_missing_file(self, tmp_mem_dir):
         """cold_sync_state.json 不存在时不报错。"""
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         result = tmpfiles_d(mem_dir=tmp_mem_dir)
         assert result["cleaned"]["cold_sync"] == 0
 
@@ -227,7 +227,7 @@ class TestIntegration:
     def test_disabled(self, tmp_mem_dir):
         """disabled 时不清理任何文件。"""
         _sysctl_overrides["tmpfiles_d.enabled"] = False
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         _touch(os.path.join(tmp_mem_dir, ".shadow_trace.old12345678.json"), age_hours=48)
         result = tmpfiles_d(mem_dir=tmp_mem_dir)
         assert result["total_cleaned"] == 0
@@ -236,7 +236,7 @@ class TestIntegration:
 
     def test_empty_dir(self, tmp_mem_dir):
         """空目录不报错。"""
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         result = tmpfiles_d(mem_dir=tmp_mem_dir)
         assert result["total_cleaned"] == 0
         assert result["bytes_freed"] == 0
@@ -244,7 +244,7 @@ class TestIntegration:
     def test_custom_max_age(self, tmp_mem_dir):
         """自定义 max_age_hours。"""
         _sysctl_overrides["tmpfiles_d.max_age_hours"] = 2
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         _touch(os.path.join(tmp_mem_dir, ".shadow_trace.age3h_session.json"), age_hours=3)
         _touch(os.path.join(tmp_mem_dir, ".shadow_trace.age1h_session.json"), age_hours=1)
         result = tmpfiles_d(mem_dir=tmp_mem_dir)
@@ -252,7 +252,7 @@ class TestIntegration:
 
     def test_mixed_all_phases(self, tmp_mem_dir):
         """所有类型混合测试。"""
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         # 创建各类过期文件
         _touch(os.path.join(tmp_mem_dir, ".shadow_trace.sess1_abcdefgh.json"), age_hours=48)
         _touch(os.path.join(tmp_mem_dir, ".shadow_trace.sess2_12345678.json"), age_hours=48)
@@ -278,7 +278,7 @@ class TestIntegration:
 
     def test_performance(self, tmp_mem_dir):
         """300 个文件清理 < 50ms。"""
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         for i in range(300):
             _touch(os.path.join(tmp_mem_dir, f".shadow_trace.perf{i:012d}.json"), age_hours=48)
         result = tmpfiles_d(mem_dir=tmp_mem_dir)
@@ -287,7 +287,7 @@ class TestIntegration:
 
     def test_total_cleaned_sum(self, tmp_mem_dir):
         """total_cleaned == sum of all phase counts。"""
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         _touch(os.path.join(tmp_mem_dir, ".shadow_trace.sum_test_s1.json"), age_hours=48)
         _touch(os.path.join(tmp_mem_dir, "page_fault_log.sum_test.json"), age_hours=48)
         result = tmpfiles_d(mem_dir=tmp_mem_dir)
@@ -295,7 +295,7 @@ class TestIntegration:
 
     def test_idempotent(self, tmp_mem_dir):
         """连续调用两次，第二次清理数为 0。"""
-        from store_mm import tmpfiles_d
+        from memory_os.store.mm import tmpfiles_d
         _touch(os.path.join(tmp_mem_dir, ".shadow_trace.idemp_test_01.json"), age_hours=48)
         r1 = tmpfiles_d(mem_dir=tmp_mem_dir)
         assert r1["total_cleaned"] == 1

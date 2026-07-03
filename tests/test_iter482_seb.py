@@ -27,10 +27,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store_vfs import ensure_schema, apply_spacing_effect_bonus
-import config
+from memory_os.store.vfs_compat import ensure_schema, apply_spacing_effect_bonus
+import memory_os.config.sysctl as config
 
 
 @pytest.fixture

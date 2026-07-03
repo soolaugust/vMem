@@ -35,9 +35,9 @@ _ROOT = Path(__file__).resolve().parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from store import open_db, ensure_schema, fts_search, get_chunks
-from scorer import retrieval_score
-from bm25 import hybrid_tokenize, bm25_scores, normalize
+from memory_os.store.api import open_db, ensure_schema, fts_search, get_chunks
+from memory_os.core.scorer import retrieval_score
+from memory_os.core.bm25 import hybrid_tokenize, bm25_scores, normalize
 
 
 # ═══════════════════════════════════════════════════════════════════

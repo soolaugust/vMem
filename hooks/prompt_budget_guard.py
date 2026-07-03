@@ -11,18 +11,27 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 WORKSPACE = Path(__file__).resolve().parents[3]
 if str(WORKSPACE) not in sys.path:
     sys.path.insert(0, str(WORKSPACE))
 
 try:
-    from harness_obs.heartbeat import record_run
+    from harness_obs.heartbeat import record_run  # type: ignore[import-untyped]
 except Exception:  # pragma: no cover - hook must not fail if observability import breaks
     record_run = None  # type: ignore[assignment]
 
-from context_governor import command_name, is_local_command, prompt_text, write_pressure_state
+from context_governor import (  # noqa: E402
+    command_name,
+    format_working_set_notice,
+    is_local_command,
+    prompt_text,
+    write_context_mode,
+    write_pressure_state,
+    write_working_set,
+)
+from lib.prompt_io import read_hook_input  # noqa: E402
 
 DEFAULT_PROMPT_CHAR_BUDGET = 120_000
 DEFAULT_TOTAL_WARN_CHAR_BUDGET = 420_000
@@ -38,17 +47,24 @@ LEGACY_TOTAL_BUDGET_ENV = "MEMORY_OS_TOTAL_CONTEXT_CHAR_BUDGET"
 STATIC_RESERVE_ENV = "MEMORY_OS_STATIC_CONTEXT_RESERVE_CHARS"
 DOWNSTREAM_RESERVE_ENV = "MEMORY_OS_DOWNSTREAM_CONTEXT_RESERVE_CHARS"
 GUARD_NAME = "prompt_budget_guard"
-MEMORY_OS_DIR = Path.home() / ".claude" / "memory-os"
+MEMORY_OS_DIR = Path(os.environ.get("MEMORY_OS_DIR", Path.home() / ".claude" / "memory-os")).expanduser()
 THRASHING_STATE_FILE = MEMORY_OS_DIR / "thrashing_state.json"
+
+
+class BudgetDetail(TypedDict):
+    prompt_chars: int
+    prompt_budget: int
+    transcript_chars: int
+    transcript_accounting: str
+    static_reserve_chars: int
+    downstream_context_reserve_chars: int
+    projected_context_chars: int
+    total_context_warn_chars: int
+    total_context_hard_chars: int
+
+
 def _read_input() -> dict[str, Any]:
-    raw = sys.stdin.read()
-    if not raw.strip():
-        return {}
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        return {}
-    return data if isinstance(data, dict) else {}
+    return read_hook_input()
 
 
 def _prompt_text(data: dict[str, Any]) -> str:
@@ -258,7 +274,7 @@ def _compact_epoch_chars(data: dict[str, Any], transcript: Path | None) -> int |
     return transcript_chars
 
 
-def _budget_detail(data: dict[str, Any], prompt: str) -> dict[str, int | str]:
+def _budget_detail(data: dict[str, Any], prompt: str) -> BudgetDetail:
     transcript = _transcript_path(data)
     compact_epoch_chars = _compact_epoch_chars(data, transcript)
     transcript_chars = compact_epoch_chars if compact_epoch_chars is not None else (
@@ -308,30 +324,45 @@ def main() -> None:
             "high",
             f"prompt chars={detail['prompt_chars']} exceeds budget={detail['prompt_budget']}",
         )
+        write_context_mode(
+            "pressure",
+            f"prompt chars={detail['prompt_chars']} exceeds budget={detail['prompt_budget']}",
+        )
         _record(True, f"warn prompt chars={detail['prompt_chars']} budget={detail['prompt_budget']}")
         sys.stdout.write(json.dumps({"decision": "approve", "reason": reason, "detail": detail}, ensure_ascii=False))
         sys.exit(0)
 
     if detail["projected_context_chars"] > detail["total_context_hard_chars"]:
+        pressure_reason = (
+            "projected context "
+            f"chars={detail['projected_context_chars']} exceeds hard={detail['total_context_hard_chars']}"
+        )
+        write_pressure_state("critical", pressure_reason)
+        write_context_mode("working_set", pressure_reason)
+        working_set = write_working_set(prompt, _transcript_path(data))
+        notice = format_working_set_notice(working_set)
         reason = (
             "[prompt_budget_guard] CRITICAL: projected request context "
             f"chars={detail['projected_context_chars']} exceeds hard budget={detail['total_context_hard_chars']} "
             f"(warn={detail['total_context_warn_chars']}, transcript={detail['transcript_chars']}, "
             f"prompt={detail['prompt_chars']}, static_reserve={detail['static_reserve_chars']}, "
             f"downstream_reserve={detail['downstream_context_reserve_chars']}). "
-            "不阻断用户输入；已进入 critical pressure，后续上下文注入必须自动降载/换出冷内容，避免模型 API context/window 400。"
-        )
-        write_pressure_state(
-            "critical",
-            "projected context "
-            f"chars={detail['projected_context_chars']} exceeds hard={detail['total_context_hard_chars']}",
+            "不阻断用户输入；已自动进入 working-set 模式并压制可选上下文注入。"
         )
         _record(
             True,
-            "critical projected context "
+            "critical working_set reclaim "
             f"chars={detail['projected_context_chars']} hard={detail['total_context_hard_chars']}",
         )
-        sys.stdout.write(json.dumps({"decision": "approve", "reason": reason, "detail": detail}, ensure_ascii=False))
+        sys.stdout.write(json.dumps({
+            "decision": "approve",
+            "reason": reason,
+            "detail": detail,
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": notice,
+            },
+        }, ensure_ascii=False))
         sys.exit(0)
 
     if detail["projected_context_chars"] > detail["total_context_warn_chars"]:
@@ -343,11 +374,12 @@ def main() -> None:
             f"downstream_reserve={detail['downstream_context_reserve_chars']}). "
             "当前会话偏大，本次不阻断；可在逻辑断点整理上下文。"
         )
-        write_pressure_state(
-            "high",
+        pressure_reason = (
             "projected context "
-            f"chars={detail['projected_context_chars']} exceeds warn={detail['total_context_warn_chars']}",
+            f"chars={detail['projected_context_chars']} exceeds warn={detail['total_context_warn_chars']}"
         )
+        write_pressure_state("high", pressure_reason)
+        write_context_mode("pressure", pressure_reason)
         _record(
             True,
             "warn projected context "

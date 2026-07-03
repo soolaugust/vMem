@@ -29,7 +29,7 @@ _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "hooks"))
 
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
 
 passed = 0
 failed = 0
@@ -51,7 +51,7 @@ def run_test(name, fn):
 
 # ── T1: madvise_write 基本写入 ──
 def test_write_basic():
-    from store import madvise_write, _MADVISE_FILE, MEMORY_OS_DIR
+    from memory_os.store.api import madvise_write, _MADVISE_FILE, MEMORY_OS_DIR
     # 清空已有文件
     if _MADVISE_FILE.exists():
         _MADVISE_FILE.unlink()
@@ -68,7 +68,7 @@ def test_write_basic():
 
 # ── T2: madvise_read 有效读取 ──
 def test_read_valid():
-    from store import madvise_write, madvise_read
+    from memory_os.store.api import madvise_write, madvise_read
     madvise_write("proj_read", ["kswapd", "compaction", "水位"], "s2")
 
     hints = madvise_read("proj_read")
@@ -77,7 +77,7 @@ def test_read_valid():
 
 # ── T3: madvise_read TTL 过期 ──
 def test_read_expired():
-    from store import _MADVISE_FILE, madvise_read, MEMORY_OS_DIR
+    from memory_os.store.api import _MADVISE_FILE, madvise_read, MEMORY_OS_DIR
 
     # 手动写入一个过期 hint
     old_ts = (datetime.now(timezone.utc) - timedelta(seconds=3600)).isoformat()
@@ -97,7 +97,7 @@ def test_read_expired():
 
 # ── T4: madvise_clear ──
 def test_clear():
-    from store import madvise_write, madvise_read, madvise_clear
+    from memory_os.store.api import madvise_write, madvise_read, madvise_clear
 
     madvise_write("proj_clear", ["hint1", "hint2"], "s3")
     assert madvise_read("proj_clear") != [], "should have hints before clear"
@@ -109,7 +109,7 @@ def test_clear():
 
 # ── T5: project 隔离 ──
 def test_project_isolation():
-    from store import madvise_write, madvise_read
+    from memory_os.store.api import madvise_write, madvise_read
 
     madvise_write("proj_A", ["alpha", "beta"], "s4")
     madvise_write("proj_B", ["gamma", "delta"], "s5")
@@ -121,7 +121,7 @@ def test_project_isolation():
 
 # ── T6: max_hints 限制 ──
 def test_max_hints():
-    from store import madvise_write, madvise_read
+    from memory_os.store.api import madvise_write, madvise_read
 
     # 写入超过 max_hints (default=10) 的数量
     many_hints = [f"hint_{i}" for i in range(20)]
@@ -170,8 +170,8 @@ def test_retriever_boost():
     验证 madvise boost 逻辑：hint 匹配的 chunk 获得加分，
     可能改变排名顺序。
     """
-    from store import madvise_write, madvise_read
-    from scorer import retrieval_score as _unified_retrieval_score
+    from memory_os.store.api import madvise_write, madvise_read
+    from memory_os.core.scorer import retrieval_score as _unified_retrieval_score
 
     # 准备：写入 hint
     project = "proj_boost_test"
@@ -209,7 +209,7 @@ def test_retriever_boost():
     assert score_a > score_b, f"baseline: A ({score_a:.4f}) should > B ({score_b:.4f})"
 
     # 应用 madvise boost
-    from config import get as _sysctl
+    from memory_os.config.sysctl import get as _sysctl
     boost = _sysctl("madvise.boost_factor")
     hints = madvise_read(project)
     hint_set = set(h.lower() for h in hints)
@@ -234,7 +234,7 @@ def test_retriever_boost():
 
 # ── T9: 无 hint 时零开销 ──
 def test_no_hint_zero_overhead():
-    from store import madvise_read, madvise_clear
+    from memory_os.store.api import madvise_read, madvise_clear
 
     madvise_clear()  # 清除所有 hint
     hints = madvise_read("nonexistent_project")
@@ -250,7 +250,7 @@ def test_no_hint_zero_overhead():
 
 # ── T10: config.py tunable 注册 ──
 def test_config_tunables():
-    from config import get, _REGISTRY
+    from memory_os.config.sysctl import get, _REGISTRY
 
     assert "madvise.boost_factor" in _REGISTRY, "boost_factor not registered"
     assert "madvise.max_hints" in _REGISTRY, "max_hints not registered"
@@ -267,7 +267,7 @@ def test_config_tunables():
 
 # ── T11: 性能 ──
 def test_performance():
-    from store import madvise_write, madvise_read
+    from memory_os.store.api import madvise_write, madvise_read
 
     t0 = time.time()
     for i in range(100):

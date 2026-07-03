@@ -13,14 +13,14 @@ _tmp_dir = tempfile.mkdtemp(prefix="sched_crud_")
 os.environ["MEMORY_OS_DIR"] = _tmp_dir
 os.environ["MEMORY_OS_DB"] = str(Path(_tmp_dir) / "store.db")
 
-from store import (
+from memory_os.store.api import (
     open_db, ensure_schema,
     sched_create_task, sched_update_task, sched_get_tasks,
     sched_get_task, sched_delete_task, sched_append_log,
     sched_link_decision, sched_dump_tasks, sched_restore_tasks,
     insert_chunk,
 )
-from schema import MemoryChunk
+from memory_os.core.schema import MemoryChunk
 
 
 if __name__ == "__main__":

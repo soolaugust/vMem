@@ -24,9 +24,9 @@ os.environ["MEMORY_OS_DB"] = os.path.join(_tmpdir, "store.db")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "hooks"))
 
-from config import get as _sysctl
-from store import open_db, ensure_schema, insert_chunk, dmesg_log, DMESG_INFO
-from schema import MemoryChunk
+from memory_os.config.sysctl import get as _sysctl
+from memory_os.store.api import open_db, ensure_schema, insert_chunk, dmesg_log, DMESG_INFO
+from memory_os.core.schema import MemoryChunk
 
 
 def _setup_db():

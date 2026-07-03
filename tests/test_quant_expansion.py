@@ -27,11 +27,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent / "hooks"))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
 # 导入被测函数
 from extractor import _quant_semantic_concepts
-from store_vfs import fts_search, open_db, ensure_schema, insert_chunk
+from memory_os.store.vfs_compat import fts_search, open_db, ensure_schema, insert_chunk
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -137,7 +137,7 @@ def test_fts_concept_match():
     写入 quantitative_evidence chunk，content 含概念词，
     用概念词查询（"性能优化"）能在 fts_search 中命中。
     """
-    from store import open_db, ensure_schema
+    from memory_os.store.api import open_db, ensure_schema
     conn = open_db()
     ensure_schema(conn)
 
@@ -168,7 +168,7 @@ def test_fts_concept_match():
         ),
     )
     # 手动写入 FTS5（模拟 insert_chunk 的 FTS5 路径）
-    from store_vfs import _cjk_tokenize, _normalize_structured_summary
+    from memory_os.store.vfs_compat import _cjk_tokenize, _normalize_structured_summary
     rowid = conn.execute(
         "SELECT rowid FROM memory_chunks WHERE id=?", (chunk_id,)
     ).fetchone()[0]

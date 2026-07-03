@@ -38,7 +38,7 @@ _MOS_ROOT = _BENCH_DIR.parent.parent
 sys.path.insert(0, str(_MOS_ROOT))
 
 
-from store_vfs import open_db, ensure_schema, fts_search, insert_chunk, _cjk_tokenize
+from memory_os.store.vfs_compat import open_db, ensure_schema, fts_search, insert_chunk, _cjk_tokenize
 
 
 def create_isolated_db(tmpdir):

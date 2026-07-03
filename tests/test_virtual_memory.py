@@ -19,8 +19,8 @@ import sqlite3
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-import tmpfs
-from store import open_db, ensure_schema
+import memory_os.runtime.tmpfs_compat as tmpfs
+from memory_os.store.api import open_db, ensure_schema
 
 MEMORY_OS_DIR = Path.home() / ".claude" / "memory-os"
 TEST_SESSIONS = 5

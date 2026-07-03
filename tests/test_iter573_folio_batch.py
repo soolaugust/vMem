@@ -9,15 +9,15 @@ OS 类比：Linux folio_batch / pagevec lru_add_drain()
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: E402 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402 — 测试隔离
 
 import sqlite3
 import json
 import time
 import pytest
-from store_core import open_db, ensure_schema, insert_chunk, bump_chunk_version, MEMORY_OS_DIR
-from store_mm import folio_batch_drain, _page_idle_save, _page_idle_load, _PAGE_IDLE_FILE
-from config import get as sysctl
+from memory_os.store.core import open_db, ensure_schema, insert_chunk, bump_chunk_version, MEMORY_OS_DIR
+from memory_os.store.mm import folio_batch_drain, _page_idle_save, _page_idle_load, _PAGE_IDLE_FILE
+from memory_os.config.sysctl import get as sysctl
 
 
 def _make_chunk(conn, summary, project="test_proj", chunk_type="decision",

@@ -27,7 +27,7 @@ from pathlib import Path
 
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
-from utils import resolve_project_id
+from memory_os.core.utils import resolve_project_id
 
 MEMORY_OS_DIR = Path.home() / ".claude" / "memory-os"
 STORE_DB = MEMORY_OS_DIR / "store.db"

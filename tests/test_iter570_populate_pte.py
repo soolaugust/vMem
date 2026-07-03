@@ -29,7 +29,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("MEMORY_OS_STORE", ":memory:")
 
-from store_mm import populate_pte
+from memory_os.store.mm import populate_pte
 
 
 # ── fixtures ───────────────────────────────────────────────────
@@ -190,7 +190,7 @@ def test_max_populate_cap():
     conn.commit()
 
     # 临时修改 config — 通过 monkey-patch
-    import config
+    import memory_os.config.sysctl as config
     original = config._REGISTRY.get("populate_pte.max_populate")
     config._REGISTRY["populate_pte.max_populate"] = (2, int, 1, 200, None, "test")
     try:
@@ -211,7 +211,7 @@ def test_disabled():
     _insert_edge(conn, "xxx", "kernel_sched")
     conn.commit()
 
-    import config
+    import memory_os.config.sysctl as config
     original = config._REGISTRY.get("populate_pte.enabled")
     config._REGISTRY["populate_pte.enabled"] = (False, bool, None, None, None, "test")
     try:

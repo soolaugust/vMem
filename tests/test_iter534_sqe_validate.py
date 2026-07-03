@@ -6,7 +6,7 @@ iter534: io_uring SQE validation — 写入时内容密度验证
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hooks"))
-import tmpfs  # noqa: F401 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 测试隔离
 
 from extractor import _sqe_validate_importance
 

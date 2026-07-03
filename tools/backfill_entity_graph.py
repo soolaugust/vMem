@@ -19,7 +19,7 @@ _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "hooks"))
 
-from store_vfs import open_db, ensure_schema
+from memory_os.store.vfs_compat import open_db, ensure_schema
 # extractor 函数
 from extractor import extract_and_write_summary_triples, extract_summary_triples
 

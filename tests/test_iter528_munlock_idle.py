@@ -4,10 +4,10 @@ OS 类比：Linux munlock() + MADV_COLD (Minchan Kim, 2019)
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: F401 — 测试隔离
-from store_mm import munlock_idle, page_idle_mark, page_idle_scan, _page_idle_load, _page_idle_save, _PAGE_IDLE_FILE
-from store_core import open_db, ensure_schema, insert_chunk, OOM_ADJ_DEFAULT
-from schema import MemoryChunk
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 测试隔离
+from memory_os.store.mm import munlock_idle, page_idle_mark, page_idle_scan, _page_idle_load, _page_idle_save, _PAGE_IDLE_FILE
+from memory_os.store.core import open_db, ensure_schema, insert_chunk, OOM_ADJ_DEFAULT
+from memory_os.core.schema import MemoryChunk
 from datetime import datetime, timezone, timedelta
 import json
 import pytest

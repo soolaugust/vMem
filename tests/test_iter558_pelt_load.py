@@ -32,11 +32,11 @@ os.environ["MEMORY_OS_DB"] = os.path.join(_tmpdir, "store.db")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from store_mm import (
+from memory_os.store.mm import (
     pelt_load, pelt_save, pelt_update, pelt_discount,
     _PELT_FILE, _PELT_EXEMPT_TYPES,
 )
-from store_core import open_db, ensure_schema, insert_chunk
+from memory_os.store.core import open_db, ensure_schema, insert_chunk
 
 import pytest
 

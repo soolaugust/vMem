@@ -34,10 +34,10 @@ _ROOT = Path(__file__).parent
 sys.path.insert(0, str(_ROOT))
 os.chdir(_ROOT)
 
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
-from store import (open_db, ensure_schema, insert_chunk, get_project_chunk_count,
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+from memory_os.store.api import (open_db, ensure_schema, insert_chunk, get_project_chunk_count,
                    kswapd_scan, delete_chunks, dmesg_read, DMESG_WARN)
-from config import get as _sysctl, _REGISTRY
+from memory_os.config.sysctl import get as _sysctl, _REGISTRY
 
 TEST_PROJECT = f"test_kswapd_{uuid.uuid4().hex[:6]}"
 
@@ -110,7 +110,7 @@ def test_zone_low():
     水位在 90-95% 时触发实际淘汰。
     修复：kswapd 使用 per-project count + balloon_quota，需要用实际 balloon 配额计算填充量。
     """
-    from store_mm import balloon_quota as _balloon_quota
+    from memory_os.store.mm import balloon_quota as _balloon_quota
     conn = open_db()
     ensure_schema(conn)
     project = f"{TEST_PROJECT}_low"
@@ -163,7 +163,7 @@ def test_zone_low():
 # ── T3: ZONE_MIN ──
 def test_zone_min():
     """水位超过 pages_min，同步硬淘汰。"""
-    from store_mm import balloon_quota as _balloon_quota
+    from memory_os.store.mm import balloon_quota as _balloon_quota
     conn = open_db()
     ensure_schema(conn)
     project = f"{TEST_PROJECT}_min"
@@ -268,7 +268,7 @@ def test_batch_size_limit():
     project = f"{TEST_PROJECT}_batch"
     _cleanup(conn, project)
 
-    from store_mm import balloon_quota as _balloon_quota
+    from memory_os.store.mm import balloon_quota as _balloon_quota
     pages_low_pct = _sysctl("kswapd.pages_low_pct")
     pages_high_pct = _sysctl("kswapd.pages_high_pct")
     pages_min_pct = _sysctl("kswapd.pages_min_pct")

@@ -27,9 +27,9 @@ sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "hooks"))
 
 # 现在可以安全导入
-from store import open_db, ensure_schema, insert_chunk
-from schema import MemoryChunk
-from config import get as _sysctl
+from memory_os.store.api import open_db, ensure_schema, insert_chunk
+from memory_os.core.schema import MemoryChunk
+from memory_os.config.sysctl import get as _sysctl
 
 MEMORY_OS_DIR = Path(_tmpdir)
 PT_FILE = MEMORY_OS_DIR / ".loader_page_table.json"

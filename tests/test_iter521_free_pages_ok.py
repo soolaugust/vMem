@@ -8,16 +8,16 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-import tmpfs  # noqa: F401,E402 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401,E402 — 测试隔离
 
 import pytest
 import sqlite3
 import json
 from datetime import datetime, timezone, timedelta
 
-from store_vfs import open_db, ensure_schema, insert_chunk, delete_chunks, get_project_chunk_count
-from store_mm import free_pages_ok
-from config import get as _cfg
+from memory_os.store.vfs_compat import open_db, ensure_schema, insert_chunk, delete_chunks, get_project_chunk_count
+from memory_os.store.mm import free_pages_ok
+from memory_os.config.sysctl import get as _cfg
 
 
 PROJECT = "test_free_pages_ok"

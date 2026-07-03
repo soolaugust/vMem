@@ -30,7 +30,7 @@ from pathlib import Path
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
 
-from context_cgroup import scan, reclaim
+from memory_os.runtime.context.cgroup_compat import scan, reclaim
 
 MEMORY_OS_DIR = Path.home() / ".claude" / "memory-os"
 THRASHING_STATE_FILE = MEMORY_OS_DIR / "thrashing_state.json"
@@ -149,6 +149,13 @@ def _db_vacuum(db_path: Path):
             ("dmesg",          300,  "id"),
             ("recall_traces",  200,  "id"),
             ("ipc_msgq",       100,  "id"),
+            # 观测/影子追踪表 —— 无 TTL 易膨胀（cache_hit_harness 发现库 5.5MB
+            # 而知识本体仅 0.09MB，膨胀 60x+ 根因即此）。按 rowid 保留最近 N 条。
+            ("shadow_traces",  2000, "rowid"),
+            ("session_focus",  2000, "rowid"),
+            ("checkpoints",    500,  "rowid"),
+            ("replay_events",  3000, "rowid"),
+            ("priming_state",  1000, "rowid"),
         ]
         freed_total = 0
         for table, keep, order_col in truncations:
@@ -255,7 +262,7 @@ def _db_vacuum(db_path: Path):
                     or not _is_quality_chunk(_nsummary)):
                     _noise_ids.append(_nid)
             if _noise_ids:
-                from store_vfs import delete_chunks as _delete_chunks
+                from memory_os.store.vfs_compat import delete_chunks as _delete_chunks
                 _noise_deleted = _delete_chunks(conn, _noise_ids)
                 freed_total += _noise_deleted
         except Exception:
@@ -273,7 +280,7 @@ def _db_vacuum(db_path: Path):
                 WHERE summary LIKE '%memory-os/iter%' AND access_count <= 2
             """).fetchall()]
             if _iter_ids:
-                from store_swap import swap_out as _swap_out
+                from memory_os.store.swap import swap_out as _swap_out
                 _swap_result = _swap_out(conn, _iter_ids)
                 freed_total += _swap_result.get("swapped_count", 0)
                 # 清理 recall_traces 中指向已 swap out chunk 的 stale refs
@@ -461,7 +468,7 @@ def main():
         if _db_path.exists():
             _sc = _sql3.connect(str(_db_path), timeout=5)
             _sc.execute("PRAGMA journal_mode=WAL")
-            from store_swap import gc_orphan_swap as _gc_orphan_swap
+            from memory_os.store.swap import gc_orphan_swap as _gc_orphan_swap
             _orphan_result = _gc_orphan_swap(_sc)
             _sc.commit()
             _sc.close()
@@ -499,7 +506,7 @@ def main():
 
     # dmesg 日志
     try:
-        from store import open_db, ensure_schema, dmesg_log, DMESG_WARN
+        from memory_os.store.api import open_db, ensure_schema, dmesg_log, DMESG_WARN
         conn = open_db()
         ensure_schema(conn)
         dmesg_log(conn, DMESG_WARN, "context_cgroup",

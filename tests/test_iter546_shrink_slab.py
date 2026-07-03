@@ -5,14 +5,14 @@ OS 类比：Linux do_shrink_slab() (Dave Chinner, 2013, mm/vmscan.c kernel 3.12)
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: E402, F401 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402, F401 — 测试隔离
 import json
 import sqlite3
 import pytest
 from datetime import datetime, timezone, timedelta
-from store_vfs import open_db, ensure_schema
-from store_mm import shrink_slab
-from store_core import dmesg_log, DMESG_INFO
+from memory_os.store.vfs_compat import open_db, ensure_schema
+from memory_os.store.mm import shrink_slab
+from memory_os.store.core import dmesg_log, DMESG_INFO
 
 
 PROJECT = "test:shrink_slab"

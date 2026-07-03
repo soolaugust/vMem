@@ -77,7 +77,7 @@ def test_procedure_fts_searchable(tmp_path, monkeypatch):
     monkeypatch.setenv("MEMORY_OS_DIR", str(tmp_path))
     monkeypatch.setenv("MEMORY_OS_DB", str(db_path))
 
-    from store import open_db, ensure_schema, insert_chunk, fts_search
+    from memory_os.store.api import open_db, ensure_schema, insert_chunk, fts_search
     import hashlib, datetime
 
     conn = open_db()
@@ -121,7 +121,7 @@ def test_procedure_not_excluded_by_default(tmp_path, monkeypatch):
     monkeypatch.setenv("MEMORY_OS_DIR", str(tmp_path))
     monkeypatch.setenv("MEMORY_OS_DB", str(db_path))
 
-    from config import get as sysctl
+    from memory_os.config.sysctl import get as sysctl
     exclude_str = sysctl("retriever.exclude_types")
     excluded = set(t.strip() for t in exclude_str.split(",") if t.strip()) if exclude_str else set()
     assert "procedure" not in excluded, f"procedure is in default exclude_types: {excluded}"

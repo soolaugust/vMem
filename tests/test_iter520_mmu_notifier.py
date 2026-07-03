@@ -25,11 +25,11 @@ import json
 
 # tmpfs 隔离
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: E402, F401 — 必须在 store 之前
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402, F401 — 必须在 store 之前
 
-import store_mm
-import store_vfs
-from store_vfs import (
+import memory_os.store.mm as store_mm
+import memory_os.store.vfs_compat as store_vfs
+from memory_os.store.vfs_compat import (
     open_db, ensure_schema, insert_chunk, delete_chunks,
     bump_chunk_version,
 )

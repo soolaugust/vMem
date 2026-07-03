@@ -15,9 +15,9 @@ from datetime import datetime, timezone, timedelta
 _ROOT = Path(__file__).parent
 sys.path.insert(0, str(_ROOT))
 
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
-import store
-import config
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+import memory_os.store.api as store
+import memory_os.config.sysctl as config
 
 # ── 测试工具 ─────────────────────────────────────────────────
 _test_count = 0

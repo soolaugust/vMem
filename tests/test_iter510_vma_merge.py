@@ -13,10 +13,10 @@ from pathlib import Path
 # tmpfs 隔离（必须在 store import 之前）
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
-import tmpfs  # noqa: F401,E402
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401,E402
 
-from store_mm import vma_merge
-from store_core import open_db, ensure_schema, dmesg_log, DMESG_INFO
+from memory_os.store.mm import vma_merge
+from memory_os.store.core import open_db, ensure_schema, dmesg_log, DMESG_INFO
 
 
 def _setup_db():

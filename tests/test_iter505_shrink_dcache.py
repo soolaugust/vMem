@@ -13,13 +13,13 @@ from datetime import datetime, timezone, timedelta
 # tmpfs 隔离
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
-import tmpfs  # noqa: F401 — 自动设置临时目录
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 自动设置临时目录
 
-from store_vfs import (
+from memory_os.store.vfs_compat import (
     open_db, ensure_schema, insert_chunk, delete_chunks,
     shrink_dcache, bump_chunk_version, get_chunk_count,
 )
-from schema import MemoryChunk
+from memory_os.core.schema import MemoryChunk
 
 
 def _fresh_db():

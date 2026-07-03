@@ -147,7 +147,7 @@ mkdir -p ~/.claude/memory-os
 三层：
 
 1. **Hooks** — 位于 Claude Code 系统调用边界（`SessionStart`、`UserPromptSubmit`、`Stop`、`PostToolUse`），调用 store。
-2. **Store** — 单一 SQLite 文件（WAL 模式）带 FTS5 全文索引，统一 VFS 接口（`store.py` / `store_vfs.py` / `store_criu.py`）。
+2. **Store** — 单一 SQLite 文件（WAL 模式）带 FTS5 全文索引，统一 VFS 接口（`memory_os.store.api` / `memory_os.store.vfs` / `memory_os.store.criu`）。
 3. **Daemons & IPC** — 持久检索 daemon（Unix socket）、异步提取池（kworker 风格）、跨 agent 通知总线。
 
 完整分层图、磁盘 schema 和各子系统设计理由见 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)。OS 与认知科学原语的完整映射见 [`docs/DESIGN_PHILOSOPHY.md`](./docs/DESIGN_PHILOSOPHY.md)。

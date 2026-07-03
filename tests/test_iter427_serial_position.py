@@ -29,8 +29,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
-from config import get as sysctl, _REGISTRY
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
+from memory_os.config.sysctl import get as sysctl, _REGISTRY
 
 
 # ── helper: build fake top_k list ──────────────────────────────────────────────

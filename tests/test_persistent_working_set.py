@@ -36,7 +36,7 @@ def _make_ws_file(tmpdir: Path, project: str, saved_at: str, chunks: list) -> Pa
 
 def test_pw1_serialization_writes_file():
     """extractor writes .ws_{project}.json with hot chunks sorted by access_count"""
-    from agent_working_set import WorkingSetRegistry, WorkingSet
+    from memory_os.runtime.workspace.agent_working_set_compat import WorkingSetRegistry, WorkingSet
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
@@ -195,7 +195,7 @@ def test_pw4_empty_chunks_no_injection():
 
 def test_pw5_sysctl_disabled_skips_restore():
     """When loader.restore_working_set=False, ws file is not read"""
-    from config import get as sysctl
+    from memory_os.config.sysctl import get as sysctl
 
     def mock_sysctl(key):
         if key == "loader.restore_working_set":

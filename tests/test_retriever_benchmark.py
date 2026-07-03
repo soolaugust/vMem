@@ -32,9 +32,9 @@ from datetime import datetime, timezone, timedelta
 _ROOT = Path(__file__).parent
 sys.path.insert(0, str(_ROOT))
 
-import tmpfs  # noqa: F401
-from store import open_db, ensure_schema, insert_chunk
-from store_vfs import fts_search
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401
+from memory_os.store.api import open_db, ensure_schema, insert_chunk
+from memory_os.store.vfs_compat import fts_search
 
 PROJECT = f"bench_{uuid.uuid4().hex[:6]}"
 PROJECT_OTHER = f"bench_other_{uuid.uuid4().hex[:6]}"

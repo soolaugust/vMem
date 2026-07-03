@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.chdir(str(Path(__file__).resolve().parent.parent))
 
-from store_core import open_db, ensure_schema, insert_chunk, already_exists
+from memory_os.store.core import open_db, ensure_schema, insert_chunk, already_exists
 
 os.environ.setdefault("MEMORY_OS_DIR", str(Path.home() / ".claude" / "memory-os"))
 

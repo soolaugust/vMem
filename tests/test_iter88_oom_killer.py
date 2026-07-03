@@ -15,7 +15,7 @@ import sys, os, re, unittest
 
 # tmpfs 隔离
 sys.path.insert(0, os.path.dirname(__file__))
-import tmpfs
+import memory_os.runtime.tmpfs_compat as tmpfs
 
 # 导入被测函数
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'hooks'))

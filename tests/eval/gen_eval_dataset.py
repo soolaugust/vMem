@@ -21,8 +21,8 @@ from datetime import datetime, timezone
 _ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(_ROOT))
 
-from store import open_db, fts_search
-from bm25 import hybrid_tokenize
+from memory_os.store.api import open_db, fts_search
+from memory_os.core.bm25 import hybrid_tokenize
 
 
 def extract_query_from_chunk(chunk: dict) -> str:

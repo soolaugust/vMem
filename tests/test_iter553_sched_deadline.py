@@ -26,7 +26,7 @@ os.environ["MEMORY_OS_DB"] = os.path.join(_tmpdir, "store.db")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from store_mm import (
+from memory_os.store.mm import (
     sched_deadline_load, sched_deadline_save,
     sched_deadline_update, sched_deadline_should_throttle,
     sched_deadline_tick, sched_deadline_stats,
@@ -129,7 +129,7 @@ def test_save_load_roundtrip():
 def test_load_missing_file():
     """状态文件不存在时返回空 dict。"""
     # 确保文件不存在
-    from store_mm import _SCHED_DEADLINE_FILE
+    from memory_os.store.mm import _SCHED_DEADLINE_FILE
     if _SCHED_DEADLINE_FILE.exists():
         _SCHED_DEADLINE_FILE.unlink()
     loaded = sched_deadline_load()
@@ -138,7 +138,7 @@ def test_load_missing_file():
 
 def test_load_corrupt_file():
     """损坏的状态文件返回空 dict（容错）。"""
-    from store_mm import _SCHED_DEADLINE_FILE
+    from memory_os.store.mm import _SCHED_DEADLINE_FILE
     _SCHED_DEADLINE_FILE.write_text("not valid json {{{{")
     loaded = sched_deadline_load()
     assert loaded == {}

@@ -25,13 +25,13 @@ _ROOT = Path(__file__).parent
 sys.path.insert(0, str(_ROOT))
 
 import sqlite3
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
-from store import (
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+from memory_os.store.api import (
     open_db, ensure_schema,
     dmesg_log, dmesg_read, dmesg_clear,
     DMESG_ERR, DMESG_WARN, DMESG_INFO, DMESG_DEBUG,
 )
-from config import get as _sysctl
+from memory_os.config.sysctl import get as _sysctl
 
 # 用内存数据库测试（不污染生产 store.db）
 def _test_db():
@@ -217,7 +217,7 @@ def test_import_from_retriever():
     try:
         sys.path.insert(0, str(_ROOT / "hooks"))
         # 只验证导入不报错（不实际运行 main）
-        from store import dmesg_log as _dl, DMESG_INFO as _di, DMESG_WARN as _dw, DMESG_DEBUG as _dd
+        from memory_os.store.api import dmesg_log as _dl, DMESG_INFO as _di, DMESG_WARN as _dw, DMESG_DEBUG as _dd
         check("dmesg_log 可导入", callable(_dl))
         check("DMESG_INFO 值正确", _di == "INFO")
         check("DMESG_WARN 值正确", _dw == "WARN")

@@ -14,8 +14,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent / "hooks"))
 
-from store_core import ensure_schema
-from bm25 import bm25_scores, normalize
+from memory_os.store.core import ensure_schema
+from memory_os.core.bm25 import bm25_scores, normalize
 
 
 def _make_conn():
@@ -185,7 +185,7 @@ class TestPatternBoostReranking:
         chunk_B 无匹配但 relevance 稍高。
         加入 pattern_boost 后，chunk_A 总分超过 chunk_B。
         """
-        from scorer import retrieval_score
+        from memory_os.core.scorer import retrieval_score
 
         pattern_keywords = {"sched_ext", "memory", "aios"}
 

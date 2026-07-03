@@ -32,9 +32,9 @@ from datetime import datetime, timezone, timedelta
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
-from store_vfs import ensure_schema
-from store_swap import run_spontaneous_recovery
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
+from memory_os.store.vfs_compat import ensure_schema
+from memory_os.store.swap import run_spontaneous_recovery
 
 
 @pytest.fixture
@@ -159,7 +159,7 @@ def test_sr4_low_importance_not_recovered(conn):
 def test_sr5_disabled_no_recovery(conn):
     """SR5: swap.sr_enabled=False 时，不执行任何自发恢复。"""
     import unittest.mock as mock
-    import config as _config
+    import memory_os.config.sysctl as _config
 
     _make_swap_entry(conn, "sr5_chunk", importance=0.8, access_count=5, days_ago=5.0)
 
@@ -201,7 +201,7 @@ def test_sr6_stability_boosted_after_recovery(conn):
 def test_sr7_max_recover_per_run_limit(conn):
     """SR7: max_recover_per_run=2 时，即使有 5 个满足条件，也只恢复 2 个。"""
     import unittest.mock as mock
-    import config as _config
+    import memory_os.config.sysctl as _config
 
     for i in range(5):
         _make_swap_entry(conn, f"sr7_chunk_{i}", importance=0.8,
@@ -260,7 +260,7 @@ def test_sr9_return_dict_accurate(conn):
 def test_sr10_highest_importance_recovered_first(conn):
     """SR10: max_recover=1 时，importance 最高的 chunk 被优先恢复。"""
     import unittest.mock as mock
-    import config as _config
+    import memory_os.config.sysctl as _config
 
     _make_swap_entry(conn, "low_imp_chunk", importance=0.70, access_count=5, days_ago=5.0)
     _make_swap_entry(conn, "high_imp_chunk", importance=0.95, access_count=5, days_ago=5.0)

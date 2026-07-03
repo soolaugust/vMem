@@ -129,7 +129,7 @@ def _seal_check_reject(text: str) -> bool:
     if len(_re.findall(r'"[\w_]+"\s*:', text)) >= 2:
         return True
     # iter593: self-referential noise — memory-os 自身实现细节不是用户知识
-    # 根因：iterate.sh agent 修改代码时，extractor 把实现决策写成 chunk，87% 零访问。
+    # 根因：scripts/iterate.sh agent 修改代码时，extractor 把实现决策写成 chunk，87% 零访问。
     # 检测特征：含代码标识符（变量名/函数名格式）= 在描述代码实现而非领域知识。
     _code_idents = ('top_k', 'recall_count', 'thrash_max_pct', 'bw_window',
                     'same_hash', '_sysctl', '_effective', 'chunk_type',
@@ -246,7 +246,7 @@ def _cleanup_pid() -> None:
 
 def _open_conn() -> sqlite3.Connection:
     """Open store.db with WAL + reasonable timeout."""
-    from store import open_db, ensure_schema
+    from memory_os.store.api import open_db, ensure_schema
     conn = open_db()
     ensure_schema(conn)
     return conn
@@ -254,11 +254,84 @@ def _open_conn() -> sqlite3.Connection:
 
 def _dequeue_tasks(conn: sqlite3.Connection, limit: int) -> list:
     """从 ipc_msgq 取 extract_task 消息（QUEUED→CONSUMED 原子）。"""
-    from store_vfs import ipc_recv
+    from memory_os.store.vfs_compat import ipc_recv
     return ipc_recv(conn, POOL_AGENT_ID, msg_type="extract_task", limit=limit)
 
 
 # ── Worker：运行提取 pipeline ─────────────────────────────────────────────────
+
+def _measure_application(conn, project: str, session_id: str, output_text: str,
+                         overlap_fn, token_fn) -> int:
+    """ROI 信号采集：测量本 session 最近一次召回的 chunk 是否在模型输出中被实际应用。
+
+    确定性文本重叠法（零 LLM）。区分「被召回(access_count)」与「被实际应用(apply_count)」——
+    这是 memory-os 此前缺失的地面真值信号。
+
+    幂等：仅处理 applied_ids_json IS NULL 的 trace，每条 trace 计一次。
+    返回被标记为「应用」的 chunk 数（供 dmesg/调试）。
+    """
+    if not output_text or len(output_text) < 40:
+        return 0
+    try:
+        import json as _json
+        # 阈值：summary(15-40 token) vs 长输出，分母取 min(summary)；真实应用回显 3-7 特征词即达 0.15-0.25。
+        # _write_chunk 去重用 0.60 是 summary-vs-summary 对称场景；此处非对称必须低得多。
+        threshold = 0.18
+        try:
+            from hooks.extractor import _sysctl as _sc
+            _v = _sc("apply_signal.overlap_threshold")
+            if _v is not None:
+                threshold = float(_v)
+        except Exception:
+            pass
+
+        row = conn.execute(
+            """SELECT id, top_k_json FROM recall_traces
+               WHERE session_id=? AND project=? AND injected=1
+                 AND top_k_json IS NOT NULL AND top_k_json != '[]'
+                 AND applied_ids_json IS NULL
+               ORDER BY timestamp DESC LIMIT 1""",
+            (session_id, project),
+        ).fetchone()
+        if not row:
+            return 0
+        trace_id, top_k_json = row[0], row[1]
+        try:
+            top_k = _json.loads(top_k_json) if top_k_json else []
+        except Exception:
+            return 0
+        if not top_k:
+            return 0
+
+        out_tok = overlap_fn(output_text)
+        if len(out_tok) < 3:
+            return 0
+
+        applied_ids = []
+        for c in top_k:
+            cid = c.get("id")
+            summ = c.get("summary", "")
+            if not cid or not summ:
+                continue
+            if token_fn(overlap_fn(summ), out_tok) >= threshold:
+                applied_ids.append(cid)
+
+        # 始终回填 applied_ids_json（即使为空 []）→ 标记「已测量」，保证幂等。
+        conn.execute(
+            "UPDATE recall_traces SET applied_ids_json=? WHERE id=?",
+            (_json.dumps(applied_ids, ensure_ascii=False), trace_id),
+        )
+        if applied_ids:
+            _ph = ",".join("?" * len(applied_ids))
+            conn.execute(
+                f"UPDATE memory_chunks SET apply_count=COALESCE(apply_count,0)+1 "
+                f"WHERE id IN ({_ph})",
+                applied_ids,
+            )
+        return len(applied_ids)
+    except Exception:
+        return 0  # 信号采集失败绝不影响抽取主流程
+
 
 def _run_extraction_pipeline(payload: dict) -> dict:
     """
@@ -323,13 +396,14 @@ def _run_extraction_pipeline(payload: dict) -> dict:
             _write_madvise_hints,
             _deduplicate,
             _read_transcript_tail,
+            _overlap_tokens, _token_overlap,
         )
-        from store import (open_db, ensure_schema, insert_chunk,
+        from memory_os.store.api import (open_db, ensure_schema, insert_chunk,
                            already_exists, merge_similar,
                            kswapd_scan, cgroup_throttle_check,
                            dmesg_log, DMESG_INFO, DMESG_DEBUG, DMESG_WARN,
                            aimd_window)
-        from schema import MemoryChunk
+        from memory_os.core.schema import MemoryChunk
 
         if not text or len(text) < _sysctl("extractor.min_length"):
             result["status"] = "skip_too_short"
@@ -611,12 +685,19 @@ def _run_extraction_pipeline(payload: dict) -> dict:
         except Exception:
             pass
 
+        # ── ROI 信号：应用度量（召回的知识是否被模型实际用上）────────────────────
+        # 用未截断全文（payload.text 已截断，全文在 hook_input_raw）
+        _full_text = hook_input_raw.get("last_assistant_message", "") or text
+        _applied = _measure_application(conn, project, session_id, _full_text,
+                                        _overlap_tokens, _token_overlap)
+        result["applied"] = _applied
+
         # ── dmesg ────────────────────────────────────────────────────────────
         elapsed = (_time.time() - t0) * 1000
         dmesg_log(conn, DMESG_INFO, "extractor_pool",
                   f"extracted: d={len(decisions)} e={len(excluded)} r={len(reasoning)} "
                   f"s={len(conv_summaries)} c={len(constraints)} cc={len(causal_chains)} "
-                  f"pf={len(page_faults)} {elapsed:.1f}ms",
+                  f"pf={len(page_faults)} applied={_applied} {elapsed:.1f}ms",
                   session_id=session_id, project=project)
         conn.commit()
         conn.close()
@@ -629,7 +710,7 @@ def _run_extraction_pipeline(payload: dict) -> dict:
             try:
                 _sirq_conn = open_db()
                 ensure_schema(_sirq_conn)
-                from store_mm import raise_softirq
+                from memory_os.store.mm import raise_softirq
                 raise_softirq(_sirq_conn, project)
                 _sirq_conn.close()
             except Exception:
@@ -637,7 +718,7 @@ def _run_extraction_pipeline(payload: dict) -> dict:
 
         # ── 广播知识更新 ─────────────────────────────────────────────────────
         try:
-            from net.agent_notify import broadcast_knowledge_update
+            from memory_os.runtime.net.agent_notify import broadcast_knowledge_update
             stats = {
                 "decisions":   len(decisions),
                 "constraints": len(constraints),
@@ -792,7 +873,7 @@ def submit_extract_task(hook_input: dict, project: str, session_id: str) -> bool
 
     # 构造 extract_task payload
     text = hook_input.get("last_assistant_message", "")
-    from config import get as _sysctl
+    from memory_os.config.sysctl import get as _sysctl
 
     # ── 入队前 min_length 门控（最轻量检查，< 0.01ms）──────────────────────────
     # COW prescan 不在此处做：COW miss 应静默退出而非 fallback 到同步路径；
@@ -833,8 +914,8 @@ def submit_extract_task(hook_input: dict, project: str, session_id: str) -> bool
     }
 
     try:
-        from store import open_db, ensure_schema
-        from store_vfs import ipc_send
+        from memory_os.store.api import open_db, ensure_schema
+        from memory_os.store.vfs_compat import ipc_send
         conn = open_db()
         ensure_schema(conn)
         ipc_send(conn, source=session_id, target=POOL_AGENT_ID,

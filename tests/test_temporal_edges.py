@@ -33,8 +33,8 @@ def tmpdb(tmp_path):
 
 @pytest.fixture()
 def conn(tmpdb):
-    from store_vfs import open_db
-    from store_graph import ensure_graph_schema
+    from memory_os.store.vfs_compat import open_db
+    from memory_os.store.graph import ensure_graph_schema
     c = open_db(tmpdb)
     ensure_graph_schema(c)
     c.execute("""
@@ -69,7 +69,7 @@ def _insert_chunk(conn, chunk_id, session_id="sess1", created_at=None):
 # ── TP1: 同 session + 时间相邻 → 双向 COOCCURS 边 ────────────────────────────
 
 def test_tp1_temporal_edge_same_session(conn):
-    from store_graph import add_edge, EdgeType
+    from memory_os.store.graph import add_edge, EdgeType
     # 模拟：旧 chunk 在 3 分钟前写入，新 chunk 刚写入
     _old_time = (datetime.now(timezone.utc) - timedelta(minutes=3)).isoformat()
     _insert_chunk(conn, "old", session_id="s1", created_at=_old_time)
@@ -159,7 +159,7 @@ def test_tp5_unknown_session_no_edge(conn):
 # ── TP6: 边的 weight = 0.3 ────────────────────────────────────────────────────
 
 def test_tp6_edge_weight_is_0_3(conn):
-    from store_graph import add_edge, EdgeType
+    from memory_os.store.graph import add_edge, EdgeType
     _insert_chunk(conn, "a", session_id="s1")
     _insert_chunk(conn, "b", session_id="s1")
     add_edge(conn, "a", "b", EdgeType.COOCCURS, 0.3, source="temporal")
@@ -173,7 +173,7 @@ def test_tp6_edge_weight_is_0_3(conn):
 # ── TP7: 已有更强的边时不降低 weight ────────────────────────────────────────
 
 def test_tp7_stronger_edge_not_downgraded(conn):
-    from store_graph import add_edge, EdgeType
+    from memory_os.store.graph import add_edge, EdgeType
     _insert_chunk(conn, "x", session_id="s1")
     _insert_chunk(conn, "y", session_id="s1")
     # 先建强边（共现边，0.5）

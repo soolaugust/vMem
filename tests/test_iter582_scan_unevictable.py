@@ -14,7 +14,7 @@ import pytest
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from store_mm import scan_unevictable, _SCAN_CURSOR_FILE, _save_cursor, MEMORY_OS_DIR
+from memory_os.store.mm import scan_unevictable, _SCAN_CURSOR_FILE, _save_cursor, MEMORY_OS_DIR
 
 
 @pytest.fixture

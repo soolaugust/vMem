@@ -25,9 +25,9 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent / "hooks"))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store_vfs import ensure_schema, update_accessed
+from memory_os.store.vfs_compat import ensure_schema, update_accessed
 
 
 def _now_iso():

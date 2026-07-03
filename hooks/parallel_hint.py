@@ -30,8 +30,22 @@ AIOS 类比: 检测用户 prompt 中的独立并行子任务，
 import sys
 import json
 import re
+from pathlib import Path
+from typing import Any
+
+_ROOT = Path(__file__).parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from lib.context_pressure import prompt_text, should_shed_optional_context
+from lib.prompt_io import emit_user_prompt_context, read_hook_input
 
 MAX_NOTICE_LEN = 200
+
+CONTINUE_PATTERNS = [
+    re.compile(r"^\s*continue\s+from\s+where\s+you\s+left\s+off\s*[\.!。！]*\s*$", re.I),
+    re.compile(r"^\s*继续(之前|上次|刚才)?(的)?(任务|工作|loop|成长 loop).*$", re.I),
+]
 
 # ── 串行依赖信号（存在则不建议并行）──────────────────────────
 SERIAL_SIGNALS = re.compile(
@@ -65,42 +79,34 @@ ENUM_OBJECTS = re.compile(
 )
 
 
+def is_continue_prompt(prompt: str) -> bool:
+    return any(pattern.search(prompt) for pattern in CONTINUE_PATTERNS)
+
+
 def _count_parallel_signals(text: str) -> tuple[int, list[str]]:
-    """
-    检测 prompt 中的并行化信号。
-    返回 (signal_count, reasons) — signal_count >= 2 时建议注入。
-    """
-    # 只看前 500 字（prompt 通常较短，避免分析全文）
     sample = text[:500]
     signals = []
 
-    # 串行依赖短路：有明显依赖关系时直接返回 0
     if SERIAL_SIGNALS.search(sample):
-        # 只有 1 处串行信号时还允许通过（可能只是部分串行）
         serial_count = len(SERIAL_SIGNALS.findall(sample))
         if serial_count >= 2:
             return 0, []
 
-    # P0: 显式并行词
     if PARALLEL_EXPLICIT.search(sample):
         signals.append("显式并行")
 
-    # P1: 编号列表（需要 3+ 项）
     numbered_items = NUMBERED_LIST.findall(text[:1000])
     if len(numbered_items) >= 3:
         signals.append(f"列表{len(numbered_items)}项")
 
-    # P2: 对比型
     if COMPARISON.search(sample):
         signals.append("对比分析")
 
-    # P3: 枚举 3+ 对象
     enum_matches = ENUM_OBJECTS.findall(sample)
     if enum_matches:
-        # 验证枚举中的项确实是独立对象（非数字序列）
-        for m in enum_matches:
-            parts = re.split(r'[，,、]', m)
-            if len(parts) >= 3 and all(2 <= len(p.strip()) <= 15 for p in parts):
+        for match in enum_matches:
+            parts = re.split(r'[，,、]', match)
+            if len(parts) >= 3 and all(2 <= len(part.strip()) <= 15 for part in parts):
                 signals.append(f"枚举{len(parts)}个对象")
                 break
 
@@ -123,13 +129,12 @@ def _extract_task_count(text: str) -> int:
 
 
 def main():
-    try:
-        raw = sys.stdin.read()
-        hook_input = json.loads(raw) if raw.strip() else {}
-    except Exception:
+    hook_input = read_hook_input()
+    prompt = prompt_text(hook_input)
+    if is_continue_prompt(prompt):
         sys.exit(0)
-
-    prompt = hook_input.get("prompt", "")
+    if should_shed_optional_context(hook_input):
+        sys.exit(0)
     if not prompt or len(prompt) < 10:
         sys.exit(0)
 
@@ -151,12 +156,7 @@ def main():
             f"主 session 通过 memory_lookup 汇总结果。"
         )
 
-        print(json.dumps({
-            "hookSpecificOutput": {
-                "hookEventName": "UserPromptSubmit",
-                "additionalContext": notice[:MAX_NOTICE_LEN],
-            }
-        }, ensure_ascii=False))
+        emit_user_prompt_context(notice[:MAX_NOTICE_LEN])
 
     except Exception:
         pass  # 永远不阻塞用户输入

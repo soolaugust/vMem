@@ -24,10 +24,10 @@ import pytest
 
 # ── tmpfs isolation ──
 sys.path.insert(0, str(Path(__file__).parent.parent))
-import tmpfs  # noqa: E402,F401 — must import before store
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402,F401 — must import before store
 
-from store_core import open_db, ensure_schema, MEMORY_OS_DIR, _ensure_checkpoint_schema
-from store_mm import release_task
+from memory_os.store.core import open_db, ensure_schema, MEMORY_OS_DIR, _ensure_checkpoint_schema
+from memory_os.store.mm import release_task
 
 
 @pytest.fixture
@@ -255,7 +255,7 @@ class TestCrossCutting:
 
     def test_config_tunables(self, conn):
         """配置参数可读取"""
-        from config import get as _cfg
+        from memory_os.config.sysctl import get as _cfg
         assert int(_cfg("release_task.shadow_file_max_age_hours")) == 24
         assert int(_cfg("release_task.shadow_db_max_per_content")) == 2
         assert int(_cfg("release_task.episodes_max_age_hours")) == 72

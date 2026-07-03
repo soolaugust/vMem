@@ -21,9 +21,9 @@ from datetime import datetime, timezone, timedelta
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent / "hooks"))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store_vfs import (
+from memory_os.store.vfs_compat import (
     open_db, ensure_schema,
     reconsolidate, suppress_unused, sleep_consolidate,
 )

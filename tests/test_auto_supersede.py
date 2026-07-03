@@ -20,14 +20,14 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store_vfs import (
+from memory_os.store.vfs_compat import (
     open_db, ensure_schema,
     detect_conflict, supersede_chunk,
     get_superseded_ids,
 )
-from store import insert_chunk
+from memory_os.store.api import insert_chunk
 
 
 @pytest.fixture

@@ -42,7 +42,7 @@ def run() -> bool:
 
         # 注入"上次 apply_signal pass"历史 + 清零 apply_count 制造复发
         sys.path.insert(0, str(MEMOS))
-        import assertion_history as ah
+        import memory_os.observability.assertion_history_compat as ah
         conn = sqlite3.connect(str(tmp / "store.db"))
         ah.ensure_history_schema(conn)
         yest = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()

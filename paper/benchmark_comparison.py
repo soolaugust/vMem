@@ -96,7 +96,7 @@ class CompactMemBackend(MemoryBackend):
         self.db_path = None
 
     def setup(self):
-        from store_vfs import ensure_schema
+        from memory_os.store.vfs_compat import ensure_schema
         self.db_path = tempfile.mktemp(suffix=".db")
         self.conn = sqlite3.connect(self.db_path)
         self.conn.row_factory = sqlite3.Row
@@ -123,7 +123,7 @@ class CompactMemBackend(MemoryBackend):
         self.conn.commit()
 
     def search(self, query: str, top_k: int = 5) -> list:
-        from store_vfs import fts_search
+        from memory_os.store.vfs_compat import fts_search
         results = fts_search(self.conn, query, project="bench", top_k=top_k)
         return [{"id": r["id"], "text": r["summary"], "score": r.get("fts_rank", 0)} for r in results]
 
@@ -131,11 +131,11 @@ class CompactMemBackend(MemoryBackend):
         return True
 
     def pin(self, chunk_id: str):
-        from store_vfs import pin_chunk
+        from memory_os.store.vfs_compat import pin_chunk
         pin_chunk(self.conn, chunk_id, project="bench", pin_type="hard")
 
     def is_pinned(self, chunk_id: str) -> bool:
-        from store_vfs import is_pinned
+        from memory_os.store.vfs_compat import is_pinned
         return is_pinned(self.conn, chunk_id, project="bench") is not None
 
     def evict(self, keep_n: int):

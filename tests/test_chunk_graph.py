@@ -35,8 +35,8 @@ def tmpdb(tmp_path):
 
 @pytest.fixture()
 def conn(tmpdb):
-    from store_vfs import open_db
-    from store_graph import ensure_graph_schema
+    from memory_os.store.vfs_compat import open_db
+    from memory_os.store.graph import ensure_graph_schema
     c = open_db(tmpdb)
     ensure_graph_schema(c)
     # 创建 memory_chunks 表（expand_with_neighbors 需要 JOIN）
@@ -70,7 +70,7 @@ def _insert_chunk(conn, chunk_id, chunk_type="decision", summary="summary"):
 # ── G1: add_edge 基本 + 幂等 ─────────────────────────────────────────────────
 
 def test_g1_add_edge_basic(conn):
-    from store_graph import add_edge, EdgeType
+    from memory_os.store.graph import add_edge, EdgeType
     result = add_edge(conn, "c1", "c2", EdgeType.RELATED, 0.8)
     assert result is True  # 新建
     row = conn.execute(
@@ -81,7 +81,7 @@ def test_g1_add_edge_basic(conn):
 
 
 def test_g1_add_edge_idempotent(conn):
-    from store_graph import add_edge, EdgeType
+    from memory_os.store.graph import add_edge, EdgeType
     add_edge(conn, "c1", "c2", EdgeType.RELATED, 0.8)
     result = add_edge(conn, "c1", "c2", EdgeType.RELATED, 0.8)
     assert result is False  # 已存在
@@ -92,7 +92,7 @@ def test_g1_add_edge_idempotent(conn):
 # ── G2: weight 更新取最大值 ───────────────────────────────────────────────────
 
 def test_g2_weight_update_takes_max(conn):
-    from store_graph import add_edge, EdgeType
+    from memory_os.store.graph import add_edge, EdgeType
     add_edge(conn, "c1", "c2", EdgeType.RELATED, 0.5)
     add_edge(conn, "c1", "c2", EdgeType.RELATED, 0.9)
     row = conn.execute(
@@ -102,7 +102,7 @@ def test_g2_weight_update_takes_max(conn):
 
 
 def test_g2_weight_does_not_decrease(conn):
-    from store_graph import add_edge, EdgeType
+    from memory_os.store.graph import add_edge, EdgeType
     add_edge(conn, "c1", "c2", EdgeType.RELATED, 0.8)
     add_edge(conn, "c1", "c2", EdgeType.RELATED, 0.3)
     row = conn.execute(
@@ -114,14 +114,14 @@ def test_g2_weight_does_not_decrease(conn):
 # ── G3: add_cooccurrence_edges ────────────────────────────────────────────────
 
 def test_g3_cooccurrence_edges(conn):
-    from store_graph import add_cooccurrence_edges
+    from memory_os.store.graph import add_cooccurrence_edges
     count = add_cooccurrence_edges(conn, ["c1", "c2", "c3"], weight=0.5)
     # 3 个 chunk → 3 对 × 2 方向 = 6 条边（新建）
     assert count == 6
 
 
 def test_g3_cooccurrence_single_no_edges(conn):
-    from store_graph import add_cooccurrence_edges
+    from memory_os.store.graph import add_cooccurrence_edges
     count = add_cooccurrence_edges(conn, ["c1"], weight=0.5)
     assert count == 0
 
@@ -129,7 +129,7 @@ def test_g3_cooccurrence_single_no_edges(conn):
 # ── G4: infer_edges_from_summaries ────────────────────────────────────────────
 
 def test_g4_decision_supersedes_excluded(conn):
-    from store_graph import infer_edges_from_summaries, EdgeType
+    from memory_os.store.graph import infer_edges_from_summaries, EdgeType
     chunks = [
         {"id": "d1", "summary": "选择 Docker 部署", "chunk_type": "decision"},
         {"id": "e1", "summary": "放弃直接 systemd 部署", "chunk_type": "excluded_path"},
@@ -146,7 +146,7 @@ def test_g4_decision_supersedes_excluded(conn):
 # ── G5: expand_with_neighbors ────────────────────────────────────────────────
 
 def test_g5_expand_finds_neighbors(conn):
-    from store_graph import add_edge, expand_with_neighbors, EdgeType
+    from memory_os.store.graph import add_edge, expand_with_neighbors, EdgeType
     _insert_chunk(conn, "seed", "decision", "种子 chunk")
     _insert_chunk(conn, "neighbor1", "reasoning_chain", "相关推理 1")
     _insert_chunk(conn, "neighbor2", "decision", "相关决策 2")
@@ -160,7 +160,7 @@ def test_g5_expand_finds_neighbors(conn):
 # ── G6: 不返回种子本身 ────────────────────────────────────────────────────────
 
 def test_g6_seed_not_in_result(conn):
-    from store_graph import add_edge, expand_with_neighbors, EdgeType
+    from memory_os.store.graph import add_edge, expand_with_neighbors, EdgeType
     _insert_chunk(conn, "a", "decision", "A")
     _insert_chunk(conn, "b", "decision", "B")
     add_edge(conn, "a", "b", EdgeType.RELATED, 0.9)
@@ -173,7 +173,7 @@ def test_g6_seed_not_in_result(conn):
 # ── G7: exclude_types 过滤 ────────────────────────────────────────────────────
 
 def test_g7_exclude_types(conn):
-    from store_graph import add_edge, expand_with_neighbors, EdgeType
+    from memory_os.store.graph import add_edge, expand_with_neighbors, EdgeType
     _insert_chunk(conn, "seed", "decision", "种子")
     _insert_chunk(conn, "stub", "entity_stub", "实体存根")
     add_edge(conn, "seed", "stub", EdgeType.RELATED, 0.9)
@@ -187,7 +187,7 @@ def test_g7_exclude_types(conn):
 # ── G8: graph_stats ───────────────────────────────────────────────────────────
 
 def test_g8_graph_stats(conn):
-    from store_graph import add_edge, graph_stats, EdgeType
+    from memory_os.store.graph import add_edge, graph_stats, EdgeType
     add_edge(conn, "a", "b", EdgeType.CAUSES, 0.8)
     add_edge(conn, "b", "c", EdgeType.RELATED, 0.7)
     stats = graph_stats(conn)
@@ -198,7 +198,7 @@ def test_g8_graph_stats(conn):
 # ── G9: min_weight 过滤 ───────────────────────────────────────────────────────
 
 def test_g9_min_weight_filter(conn):
-    from store_graph import add_edge, expand_with_neighbors, EdgeType
+    from memory_os.store.graph import add_edge, expand_with_neighbors, EdgeType
     _insert_chunk(conn, "seed", "decision", "种子")
     _insert_chunk(conn, "weak", "decision", "弱关联")
     _insert_chunk(conn, "strong", "decision", "强关联")

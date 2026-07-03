@@ -27,9 +27,9 @@ from datetime import datetime, timezone, timedelta
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store_vfs import ensure_schema, insert_trigger, query_triggers, fire_trigger
+from memory_os.store.vfs_compat import ensure_schema, insert_trigger, query_triggers, fire_trigger
 # Import detection function from extractor
 sys.path.insert(0, str(Path(__file__).parent.parent / "hooks"))
 from extractor import _detect_prospective_intent

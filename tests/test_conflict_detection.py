@@ -32,7 +32,7 @@ def tmpdb(tmp_path):
 
 @pytest.fixture()
 def conn(tmpdb):
-    from store_vfs import open_db, ensure_schema
+    from memory_os.store.vfs_compat import open_db, ensure_schema
     c = open_db(tmpdb)
     ensure_schema(c)
     yield c
@@ -56,7 +56,7 @@ def _insert_chunk(conn, chunk_id, summary, chunk_type="decision",
 
 def test_cd1_non_decision_type_no_conflict(conn):
     """conversation_summary 类型不触发冲突检测"""
-    from store_vfs import detect_and_invalidate_conflicts
+    from memory_os.store.vfs_compat import detect_and_invalidate_conflicts
     _insert_chunk(conn, "old1", "选择 SQLite 因为轻量", "conversation_summary")
     result = detect_and_invalidate_conflicts(
         conn, "放弃 SQLite 改用 PostgreSQL", "conversation_summary", "proj"
@@ -71,7 +71,7 @@ def test_cd1_non_decision_type_no_conflict(conn):
 
 def test_cd2_no_negation_no_conflict(conn):
     """new_summary 中没有否定/替换词 → 返回 0"""
-    from store_vfs import detect_and_invalidate_conflicts
+    from memory_os.store.vfs_compat import detect_and_invalidate_conflicts
     _insert_chunk(conn, "old2", "选择 Redis 因为性能好", "decision")
     result = detect_and_invalidate_conflicts(
         conn, "采用 PostgreSQL 作为主数据库", "decision", "proj"
@@ -83,7 +83,7 @@ def test_cd2_no_negation_no_conflict(conn):
 
 def test_cd3_negation_triggers_invalidation(conn):
     """'放弃 SQLite' → 旧'选择 SQLite'降权"""
-    from store_vfs import detect_and_invalidate_conflicts
+    from memory_os.store.vfs_compat import detect_and_invalidate_conflicts
     _insert_chunk(conn, "old3", "选择 SQLite 因为简单易部署", "decision",
                   importance=0.85, oom_adj=0)
     result = detect_and_invalidate_conflicts(
@@ -104,7 +104,7 @@ def test_cd3_negation_triggers_invalidation(conn):
 
 def test_cd4_old_chunk_already_negated_not_penalized(conn):
     """旧 chunk 本身是排除路径（不含推荐词）→ 不降权"""
-    from store_vfs import detect_and_invalidate_conflicts
+    from memory_os.store.vfs_compat import detect_and_invalidate_conflicts
     # 旧 chunk 已经是否定语义：不含推荐词
     _insert_chunk(conn, "old4", "不选 SQLite 因为并发差", "decision",
                   importance=0.70)
@@ -122,7 +122,7 @@ def test_cd4_old_chunk_already_negated_not_penalized(conn):
 
 def test_cd5_importance_floor_at_0_1(conn):
     """importance 很低时（0.05），降权后不低于 0.1"""
-    from store_vfs import detect_and_invalidate_conflicts
+    from memory_os.store.vfs_compat import detect_and_invalidate_conflicts
     _insert_chunk(conn, "old5", "选择使用 Redis 采用缓存方案", "decision",
                   importance=0.05, oom_adj=0)
     # 手动触发降权（通过直接调用内部逻辑）
@@ -135,7 +135,7 @@ def test_cd5_importance_floor_at_0_1(conn):
 
 def test_cd6_oom_adj_increased(conn):
     """降权时 oom_adj += 100（加速后续 kswapd 淘汰）"""
-    from store_vfs import detect_and_invalidate_conflicts
+    from memory_os.store.vfs_compat import detect_and_invalidate_conflicts
     _insert_chunk(conn, "old6", "推荐采用 Kafka 消息队列", "decision",
                   importance=0.85, oom_adj=50)
     result = detect_and_invalidate_conflicts(

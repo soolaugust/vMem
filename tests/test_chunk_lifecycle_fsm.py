@@ -25,8 +25,8 @@ from datetime import datetime, timezone, timedelta
 _ROOT = Path(__file__).parent
 sys.path.insert(0, str(_ROOT))
 
-import tmpfs  # noqa: F401
-from store import (
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401
+from memory_os.store.api import (
     open_db, ensure_schema, insert_chunk,
     mark_active, mark_cold, mark_dead, mark_ghost,
     fsm_transition, get_state_distribution, CHUNK_STATES,

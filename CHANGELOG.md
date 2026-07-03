@@ -29,16 +29,16 @@ on 2026-05-19. Public repository: <https://github.com/soolaugust/vMem>.
   `agent-memory`, `multi-agent`, `persistent-memory`, etc.
 - **Social preview asset** at `assets/social-preview.svg`.
 - **MCP server** exposing `memory_lookup`, `pin_memory`, `unpin_memory`,
-  `memory_stats`, `list_pinned` (`mcp_memory_lookup.py`).
-- **Privacy filter** (`privacy_filter.py`) for secrets / PII heuristics.
-- **Knowledge VFS** (`knowledge_vfs.py`, `knowledge_vfs_backends.py`,
-  `knowledge_vfs_init.py`) — pluggable storage layer.
+  `memory_stats`, `list_pinned` (`memory_os/cli/mcp_memory_lookup.py`).
+- **Privacy filter** (`memory_os/core/privacy_filter.py`) for secrets / PII heuristics.
+- **Knowledge VFS** (`memory_os/vfs/knowledge.py`, `memory_os/vfs/knowledge_backends.py`,
+  `memory_os/vfs/knowledge_init.py`) — pluggable storage layer.
 - **Eviction subsystem** with kswapd-style watermarks and DAMON-inspired
   access tracking.
 - **Pin / mlock semantics** — hard and soft pinning protect chunks from
   eviction under pressure.
 - **Pair-saturation diversity recall** to avoid redundant similar chunks.
-- **Production assertions** (`production_assertions.py`) — runtime invariants
+- **Production assertions** (`memory_os/observability/production_assertions.py`) — runtime invariants
   that guard the hot path.
 - **3,500+ test cases** under `tests/` covering core retrieval, scoring,
   eviction, MCP server, privacy filter, and integration paths.

@@ -34,8 +34,8 @@ os.environ["MEMORY_OS_DB"] = os.path.join(_tmpdir, "store.db")
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from store_criu import chunk_recall_counts, chunk_session_recall_counts
-from scorer import (
+from memory_os.store.criu import chunk_recall_counts, chunk_session_recall_counts
+from memory_os.core.scorer import (
     retrieval_score, bandwidth_throttle, cfs_bandwidth_throttle,
     saturation_penalty,
 )

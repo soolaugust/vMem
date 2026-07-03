@@ -17,10 +17,10 @@ _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "tests"))
 
-import tmpfs  # noqa: F401
-from store import open_db, ensure_schema, insert_chunk
-from store_vfs import fts_optimize
-from store_mm import warmup_swap_cache
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401
+from memory_os.store.api import open_db, ensure_schema, insert_chunk
+from memory_os.store.vfs_compat import fts_optimize
+from memory_os.store.mm import warmup_swap_cache
 
 PROJECT = f"iter362_{uuid.uuid4().hex[:6]}"
 
@@ -52,7 +52,7 @@ def test_360_fts_optimize_basic():
     ensure_schema(conn)
 
     # 重置模块级冷却时间（强制执行）
-    import store_vfs as _sv
+    import memory_os.store.vfs_compat as _sv
     old_last = _sv._fts_last_optimize
     _sv._fts_last_optimize = 0.0
 
@@ -70,7 +70,7 @@ def test_360_fts_optimize_cooldown():
     conn = open_db()
     ensure_schema(conn)
 
-    import store_vfs as _sv
+    import memory_os.store.vfs_compat as _sv
     old_last = _sv._fts_last_optimize
     # 设置为"刚执行过"
     _sv._fts_last_optimize = time.monotonic()
@@ -88,7 +88,7 @@ def test_360_fts_optimize_force():
     conn = open_db()
     ensure_schema(conn)
 
-    import store_vfs as _sv
+    import memory_os.store.vfs_compat as _sv
     _sv._fts_last_optimize = time.monotonic()  # 刚执行过
 
     result = fts_optimize(conn, force=True)
@@ -114,7 +114,7 @@ def test_362_warmup_no_swap():
 
 def test_362_warmup_with_high_importance_swap():
     """T5: 将高 importance chunk 先 swap_out，再 warmup 恢复"""
-    from store_core import swap_out as _swap_out
+    from memory_os.store.core import swap_out as _swap_out
     conn = open_db()
     ensure_schema(conn)
 
@@ -151,7 +151,7 @@ def test_362_warmup_with_high_importance_swap():
 
 def test_362_warmup_respects_threshold():
     """T6: importance < threshold 的 chunk 不被 warmup 恢复"""
-    from store_core import swap_out as _swap_out
+    from memory_os.store.core import swap_out as _swap_out
     conn = open_db()
     ensure_schema(conn)
 
@@ -197,10 +197,10 @@ def test_362_warmup_cooldown():
     session_id = f"cooldown_test_{uuid.uuid4().hex[:8]}"
 
     # 第一次调用（触发冷却文件写入）
-    from store_mm import _WARMUP_COOLDOWN_FILE
+    from memory_os.store.mm import _WARMUP_COOLDOWN_FILE
     # 手动写入冷却文件（模拟刚执行过）
     try:
-        import store_mm as _smm
+        import memory_os.store.mm as _smm
         _smm._WARMUP_COOLDOWN_FILE.parent.mkdir(parents=True, exist_ok=True)
         _smm._WARMUP_COOLDOWN_FILE.write_text(
             json.dumps({"session_id": session_id, "timestamp": time.time(),

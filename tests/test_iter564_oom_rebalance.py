@@ -11,10 +11,10 @@ from datetime import datetime, timezone, timedelta
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # tmpfs 隔离
-import tmpfs  # noqa: F401
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401
 
-from store_core import open_db, ensure_schema, _ensure_checkpoint_schema
-from store_mm import oom_score_adj_rebalance
+from memory_os.store.core import open_db, ensure_schema, _ensure_checkpoint_schema
+from memory_os.store.mm import oom_score_adj_rebalance
 
 
 def _conn():
@@ -208,7 +208,7 @@ def test_disabled():
     """disabled 时 adjusted=0"""
     conn = _conn()
     _ins(conn, "p", "c1", access_count=5, oom_adj=1000)
-    import config
+    import memory_os.config.sysctl as config
     orig = config.get
     def mock_get(key):
         if key == "oom_rebalance.enabled":

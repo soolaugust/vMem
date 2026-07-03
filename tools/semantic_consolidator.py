@@ -38,7 +38,7 @@ from typing import Optional
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
 
-from store import open_db, ensure_schema
+from memory_os.store.api import open_db, ensure_schema
 
 # 语义记忆的特殊项目 ID
 SEMANTIC_PROJECT = "__semantic__"
@@ -266,7 +266,7 @@ def _upsert_semantic_chunk(conn: sqlite3.Connection, chunk: dict,
         ))
         # 同步写入 FTS5（复用 store_vfs 的 insert_chunk_fts 如果存在，否则手动）
         try:
-            from store_vfs import _insert_fts as _fts
+            from memory_os.store.vfs_compat import _insert_fts as _fts
             _fts(conn, chunk["id"], chunk["summary"], chunk["content"] or "")
         except Exception:
             pass  # FTS5 写入失败不阻塞主流程
@@ -285,9 +285,26 @@ def run_consolidation(conn: sqlite3.Connection,
       trigram Jaccard 对长文本偏保守，0.55 约等于"主题相关"而非"内容相同"。
       这正是我们想要的：同一领域知识在不同 project 的不同表述。
     """
-    stats = {"candidates": 0, "clusters": 0, "created": 0, "updated": 0}
+    stats = {"candidates": 0, "clusters": 0, "created": 0, "updated": 0, "pii_blocked": 0}
 
     chunks = _load_candidate_chunks(conn, min_importance)
+
+    # ── 安全分级降级（借鉴 komi-learn safety_floor）──────────────────────
+    # 含 PII/机器/项目标识符的 chunk 永不进入跨项目语义层（__semantic__），
+    # 对应 komi 的"永不 global"。在聚类前过滤，从源头阻断泄露。
+    try:
+        from memory_os.core.privacy_filter import can_promote_to_semantic
+        _filtered = []
+        for c in chunks:
+            _text = (c.get("summary", "") or "") + "\n" + (c.get("content", "") or "")
+            if can_promote_to_semantic(_text):
+                _filtered.append(c)
+            else:
+                stats["pii_blocked"] += 1
+        chunks = _filtered
+    except Exception:
+        pass  # 过滤失败不阻断巩固（仅在 import/异常时 fail-open）
+
     stats["candidates"] = len(chunks)
 
     if len(chunks) < 2:

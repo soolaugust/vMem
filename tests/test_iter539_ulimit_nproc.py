@@ -31,7 +31,7 @@ _test_db = os.path.join(_tmpdir, "test.db")
 os.environ["MEMORY_OS_DB"] = _test_db
 
 import pytest
-from config import get as _sysctl
+from memory_os.config.sysctl import get as _sysctl
 
 # ── 模拟 ulimit 裁剪逻辑（从 extractor.py 提取的核心算法）──
 _TYPE_PRIORITY = {

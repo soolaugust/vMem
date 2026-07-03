@@ -22,9 +22,9 @@ os.environ["MEMORY_OS_DB"] = os.path.join(_tmpdir, "store.db")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from store_core import open_db, ensure_schema, insert_chunk, STORE_DB
-from store_mm import sched_rt_bandwidth
-from config import get as _cfg
+from memory_os.store.core import open_db, ensure_schema, insert_chunk, STORE_DB
+from memory_os.store.mm import sched_rt_bandwidth
+from memory_os.config.sysctl import get as _cfg
 
 
 def _make_chunk(conn, summary, project="git:test123", chunk_type="decision",

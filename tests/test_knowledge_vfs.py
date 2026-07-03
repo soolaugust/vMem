@@ -19,10 +19,10 @@ from datetime import datetime, timezone
 _ROOT = Path(__file__).parent
 sys.path.insert(0, str(_ROOT))
 
-from knowledge_vfs import (
+from memory_os.vfs.knowledge_compat import (
     VFSItem, VFSItemType, VFSSource, VFSMetadata, VFSCache, KnowledgeVFS
 )
-from knowledge_vfs_backends import FilesystemBackend, ProjectBackend
+from memory_os.vfs.knowledge_backends_compat import FilesystemBackend, ProjectBackend
 
 
 # ─────────────────────────────────────────────────────────────
@@ -187,7 +187,7 @@ def test_project_backend():
 
 def test_knowledge_vfs_routing():
     """测试 KnowledgeVFS 路由逻辑"""
-    from knowledge_vfs import VFSBackend
+    from memory_os.vfs.knowledge_compat import VFSBackend
 
     class MockBackend(VFSBackend):
         def name(self) -> str:
@@ -260,7 +260,7 @@ def test_knowledge_vfs_routing():
 
 def test_path_parsing():
     """测试虚拟路径解析"""
-    from knowledge_vfs import VFSBackend
+    from memory_os.vfs.knowledge_compat import VFSBackend
 
     class DummyBackend(VFSBackend):
         def name(self): return "dummy"

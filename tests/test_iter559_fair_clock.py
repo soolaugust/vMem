@@ -31,8 +31,8 @@ os.environ["MEMORY_OS_DB"] = os.path.join(_tmpdir, "store.db")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from store_mm import fair_clock
-from store_core import open_db, ensure_schema, insert_chunk
+from memory_os.store.mm import fair_clock
+from memory_os.store.core import open_db, ensure_schema, insert_chunk
 
 import pytest
 from datetime import datetime, timezone, timedelta
@@ -229,7 +229,7 @@ def test_cold_start_no_calibrate(conn):
 
 def test_disabled(conn):
     """fair_clock.enabled=False → 返回空结果。"""
-    from config import sysctl_set
+    from memory_os.config.sysctl import sysctl_set
     sysctl_set("fair_clock.enabled", False)
     try:
         _insert_chunk(conn, "chunk-dis", "proj-g", "decision", 0.90, age_days=10)
@@ -289,7 +289,7 @@ def test_has_cum_score_no_demote(conn):
 
 def test_max_per_scan(conn):
     """降级数不超过 max_per_scan。"""
-    from config import sysctl_set
+    from memory_os.config.sysctl import sysctl_set
     sysctl_set("fair_clock.max_per_scan", 3)
     try:
         for i in range(10):

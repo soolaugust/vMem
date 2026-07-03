@@ -71,9 +71,11 @@ if _ROOT not in sys.path:
 _HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
-from config import get as _sysctl  # ~3ms, 模块级函数依赖
-from config import sched_ext_match as _sched_ext_match  # 迭代47: sched_ext
+from memory_os.config.sysctl import get as _sysctl  # ~3ms, 模块级函数依赖
+from memory_os.config.sysctl import sched_ext_match as _sched_ext_match  # 迭代47: sched_ext
 from context_governor import should_shed_optional_context
+from lib.context_pressure import prompt_text
+from lib.prompt_io import read_hook_input
 
 # 注入防御 defanging（借鉴 komi-learn）：注入前清洗 chunk 文本，中和 prompt injection
 try:
@@ -106,7 +108,7 @@ def _format_context_with_offload(inject_lines, top_k, max_chars):
         chunks.append(c)
 
     try:
-        from context_offload import format_chunks
+        from memory_os.runtime.context.offload_compat import format_chunks
         pressure = "full" if len(context_text) > full_at else "some"
         offloaded = format_chunks(chunks, pressure=pressure, max_chars=max_chars)
         if offloaded:
@@ -178,11 +180,11 @@ def _load_modules():
     import uuid as _uuid
     import hashlib as _hashlib  # 迭代156：Stage 2 才需要 md5 injection hash，延迟到此处加载
     from datetime import datetime as _datetime, timezone as _timezone
-    from utils import resolve_project_id as _resolve_project_id
-    from scorer import retrieval_score as _retrieval_score
-    from scorer import recency_score as _recency_score
-    from scorer import tmv_saturation_discount as _tmv_saturation_discount
-    from store import (open_db as _open_db, ensure_schema as _ensure_schema,
+    from memory_os.core.utils import resolve_project_id as _resolve_project_id
+    from memory_os.core.scorer import retrieval_score as _retrieval_score
+    from memory_os.core.scorer import recency_score as _recency_score
+    from memory_os.core.scorer import tmv_saturation_discount as _tmv_saturation_discount
+    from memory_os.store.api import (open_db as _open_db, ensure_schema as _ensure_schema,
                        get_chunks as _get_chunks, update_accessed as _update_accessed,
                        insert_trace as _insert_trace, fts_search as _fts_search,
                        dmesg_log as _dmesg_log, madvise_read as _madvise_read,
@@ -191,10 +193,10 @@ def _load_modules():
                        readahead_pairs as _readahead_pairs,
                        context_pressure_governor as _context_pressure_governor,
                        chunk_recall_counts as _chunk_recall_counts)
-    from store_criu import chunk_recall_counts_memcg as _chunk_recall_counts_memcg
-    from store import DMESG_INFO as _DMESG_INFO, DMESG_WARN as _DMESG_WARN, DMESG_DEBUG as _DMESG_DEBUG
-    from bm25 import hybrid_tokenize as _hybrid_tokenize, bm25_scores as _bm25_scores, normalize as _normalize, bm25_scores_cached as _bm25_scores_cached
-    from store_vfs import read_chunk_version as _read_chunk_version
+    from memory_os.store.criu import chunk_recall_counts_memcg as _chunk_recall_counts_memcg
+    from memory_os.store.api import DMESG_INFO as _DMESG_INFO, DMESG_WARN as _DMESG_WARN, DMESG_DEBUG as _DMESG_DEBUG
+    from memory_os.core.bm25 import hybrid_tokenize as _hybrid_tokenize, bm25_scores as _bm25_scores, normalize as _normalize, bm25_scores_cached as _bm25_scores_cached
+    from memory_os.store.vfs_compat import read_chunk_version as _read_chunk_version
     # config 已在模块级 import（_sysctl, _sched_ext_match），无需重复加载
 
     # 注入全局变量供后续函数使用
@@ -294,7 +296,7 @@ def _load_modules():
             def _new_vfs_search(query, sources=None, top_k=3, timeout_ms=100):
                 """新 VFS 搜索（惰性初始化版），返回 knowledge_router 兼容格式"""
                 # 惰性 import + 初始化：第一次调用时才触发（RTLD_LAZY 语义）
-                from vfs import get_vfs as _lazy_get_vfs
+                from memory_os.vfs.api import get_vfs as _lazy_get_vfs
                 _vfs = _lazy_get_vfs()
                 items = _vfs.search(query, top_k=top_k, deadline_ms=timeout_ms)
                 if sources:
@@ -332,7 +334,7 @@ def _load_modules():
 
     if not _vfs_loaded:
         try:
-            from knowledge_vfs_init import search as _kvfs_search, format_for_context as _kvfs_format, init_knowledge_vfs as _kvfs_init
+            from memory_os.vfs.knowledge_init_compat import search as _kvfs_search, format_for_context as _kvfs_format, init_knowledge_vfs as _kvfs_init
             _kvfs_init()
             g['kr_route'] = _kvfs_search
             g['kr_format'] = _kvfs_format
@@ -450,17 +452,8 @@ def _vdso_fast_exit() -> bool:
       TLB hit: 等价于 TLB + fast syscall return（不走完整 page table walk）
     """
     # ── 读 stdin ──
-    try:
-        raw = sys.stdin.read()
-        hook_input = json.loads(raw) if raw.strip() else {}
-    except Exception:
-        hook_input = {}
-
-    # iter685: 兼容 Claude Code hook input 格式
-    # Claude Code 发送 {"hookSpecificInput": {"userMessage": "..."}}
-    # 旧格式用 "prompt" 字段（兼容保留）
-    _hsi = hook_input.get("hookSpecificInput", {})
-    prompt = (_hsi.get("userMessage", "") or hook_input.get("prompt", "") or "").strip()
+    hook_input = read_hook_input()
+    prompt = prompt_text(hook_input).strip()
 
     # ── Context pressure shedding ─────────────────────────────────────────
     # UserPromptSubmit already ran context-pressure-guard before retriever.
@@ -775,7 +768,7 @@ def _spreading_activate(conn, hit_chunk_ids: list, project: str = None,
       {chunk_id: activation_score} — 新增邻居 chunk 的激活分
     """
     try:
-        from store_vfs import spreading_activate as _sa
+        from memory_os.store.vfs_compat import spreading_activate as _sa
         return _sa(conn, hit_chunk_ids, project=project, decay=decay,
                    max_hops=max_hops, existing_ids=existing_ids,
                    max_activation_bonus=max_activation_bonus)
@@ -1570,7 +1563,7 @@ def main():
     # OS 类比：NUMA-aware scheduler — 优先将进程调度到数据所在的 NUMA 节点。
     if query:
         try:
-            from store_vfs import extract_encoding_context as _eec
+            from memory_os.store.vfs_compat import extract_encoding_context as _eec
             _q_ctx = _eec(query)
             _current_context["session_type"] = _q_ctx.get("session_type", "unknown")
             _current_context["task_verbs"] = _q_ctx.get("task_verbs", [])
@@ -2116,7 +2109,7 @@ def main():
         # 迭代312：Session-scoped recall counts
         _session_recall_counts = {}
         try:
-            from store_criu import chunk_session_recall_counts
+            from memory_os.store.criu import chunk_session_recall_counts
             import sqlite3 as _sc_sql
             _sc_conn = _sc_sql.connect(str(STORE_DB))
             _session_recall_counts = chunk_session_recall_counts(_sc_conn, project, session_id, window=100)
@@ -2166,7 +2159,7 @@ def main():
         # 人的记忆类比：focus of attention — 焦点中的概念激活阈值更低
         _focus_keywords: list = []
         try:
-            from store_focus import ensure_focus_schema, get_focus
+            from memory_os.store.focus import ensure_focus_schema, get_focus
             ensure_focus_schema(conn)
             _focus_keywords = get_focus(conn, session_id)
         except Exception:
@@ -2381,7 +2374,7 @@ def main():
         _mcm_query_valence: float = 0.0
         try:
             if _sysctl("retriever.mcm_enabled") is not False:
-                from store_vfs import compute_emotional_valence as _cev
+                from memory_os.store.vfs_compat import compute_emotional_valence as _cev
                 _mcm_query_valence = _cev(query)
         except Exception:
             pass
@@ -3799,7 +3792,7 @@ def main():
             # 当前焦点关键词命中 → chunk 进入"注意焦点"→ 激活阈值降低
             if _focus_keywords:
                 try:
-                    from store_focus import focus_score_bonus as _fsb
+                    from memory_os.store.focus import focus_score_bonus as _fsb
                     _fb = _fsb(_focus_keywords, chunk.get("summary", ""),
                                chunk.get("content", "")[:200])
                     score += _fb
@@ -3845,7 +3838,7 @@ def main():
                 _sm_enabled = _sysctl("retriever.source_monitor_enabled")
                 if _sm_enabled is None or _sm_enabled:  # default: enabled
                     _sr = float(chunk.get("source_reliability") or 0.7)
-                    from store_vfs import source_monitor_weight as _smw
+                    from memory_os.store.vfs_compat import source_monitor_weight as _smw
                     _sm_weight = _smw(_sr)
                     if abs(_sm_weight - 1.0) > 0.001:  # 避免无意义乘法
                         score *= _sm_weight
@@ -3865,7 +3858,7 @@ def main():
                 if _cdf_enabled is None or _cdf_enabled:  # default: enabled
                     _enc_ctx_str = chunk.get("encode_context") or ""
                     if _enc_ctx_str:
-                        from store_vfs import (
+                        from memory_os.store.vfs_compat import (
                             compute_context_overlap as _ccoverlap,
                             context_cue_weight as _ccweight,
                             extract_encode_context as _ec_extract,
@@ -3890,7 +3883,7 @@ def main():
                     _pr_chunk_id = chunk.get("id") or chunk.get("chunk_id")
                     _pr_project = chunk.get("project", "")
                     if _pr_chunk_id and _pr_project and conn is not None:
-                        from store_vfs import compute_priming_boost as _cpboost
+                        from memory_os.store.vfs_compat import compute_priming_boost as _cpboost
                         _pr_boost = _cpboost(conn, _pr_chunk_id, _pr_project)
                         if _pr_boost > 0.001:
                             score += _pr_boost
@@ -3926,7 +3919,7 @@ def main():
                             _ri_ct = _ri_now
                         _ri_age_days = max(0.0, (_ri_now - _ri_ct).total_seconds() / 86400)
                         if _ri_age_days > 7.0:
-                            from store_vfs import (
+                            from memory_os.store.vfs_compat import (
                                 get_newer_same_topic_count as _gntc,
                                 compute_recency_penalty as _crp,
                             )
@@ -4021,8 +4014,8 @@ def main():
         _ws_hits = []
         if priority == "FULL" and session_id:
             try:
-                from agent_working_set import registry as _ws_registry
-                from bm25 import bm25_normalized as _ws_bm25
+                from memory_os.runtime.workspace.agent_working_set_compat import registry as _ws_registry
+                from memory_os.core.bm25 import bm25_normalized as _ws_bm25
                 _ws = _ws_registry.get(session_id)
                 if _ws is not None and _ws.size() > 0:
                     with _ws._lock:
@@ -4154,7 +4147,7 @@ def main():
             # shmem_link 通过 entity co-occurrence 发现隐式关联（共享同一 entity 的 chunk）。
             if not _check_deadline("shmem_link"):
                 try:
-                    from store_vfs import shmem_link as _shmem
+                    from memory_os.store.vfs_compat import shmem_link as _shmem
                     _shmem_result = _shmem(
                         conn, list(fts_ids), project=project,
                         existing_ids=fts_ids,
@@ -4192,7 +4185,7 @@ def main():
             # 再叠加 schema 框架级激活（更高层次语义聚合）。
             if not _check_deadline("schema_spread"):
                 try:
-                    from store_vfs import schema_spread_activate as _schema_sa
+                    from memory_os.store.vfs import schema_spread_activate as _schema_sa
                     _schema_result = _schema_sa(
                         conn, list(fts_ids), project=project,
                         max_per_schema=3,
@@ -4309,7 +4302,7 @@ def main():
                     _CURIOSITY_MIN_QLEN  = 8      # 最小 query 长度（过滤短确认词）
                     if (_fts_top_score < _CURIOSITY_WMARK_LOW
                             and len(query) > _CURIOSITY_MIN_QLEN):
-                        from store_vfs import enqueue_curiosity as _enqueue_curiosity
+                        from memory_os.store.vfs_compat import enqueue_curiosity as _enqueue_curiosity
                         _eq_n = _enqueue_curiosity(conn, query, project,
                                                     top_score=_fts_top_score)
                         if _eq_n:
@@ -4418,7 +4411,7 @@ def main():
                     and not use_fts
                     and not _check_deadline("tot_activate")):
                 try:
-                    from store_vfs import tot_activate as _tot_activate
+                    from memory_os.store.vfs_compat import tot_activate as _tot_activate
                     _tot_result = _tot_activate(
                         conn, query, project,
                         existing_ids=_tot_fts_ids,
@@ -6055,19 +6048,19 @@ def main():
                         mglru_promote(wconn, accessed_ids)
                         # 迭代515：userfaultfd — import chunk 首次命中时 promote
                         try:
-                            from store_mm import userfaultfd_promote as _uffd
+                            from memory_os.store.mm import userfaultfd_promote as _uffd
                             _uffd(wconn, accessed_ids)
                         except Exception:
                             pass
                         # iter531：mlock_onfault — ONFAULT chunk 首次命中时升级为 PROTECTED
                         try:
-                            from store_mm import mlock_onfault_promote as _mop
+                            from memory_os.store.mm import mlock_onfault_promote as _mop
                             _mop(wconn, accessed_ids)
                         except Exception:
                             pass
                         # 迭代511：page_idle clear — 从 idle bitmap 移除被命中的 chunks
                         try:
-                            from store_mm import page_idle_clear as _pic
+                            from memory_os.store.mm import page_idle_clear as _pic
                             _pic(accessed_ids, project)
                         except Exception:
                             pass
@@ -6265,7 +6258,7 @@ def main():
         try:
             _is_session_start = (retrieval_mode == "full")
             if _is_session_start:
-                from store_vfs import find_spaced_review_candidates
+                from memory_os.store.vfs_compat import find_spaced_review_candidates
                 _spacing_candidates = find_spaced_review_candidates(
                     conn, project, top_n=3, min_importance=0.70
                 )
@@ -7705,7 +7698,7 @@ def main():
         # OS 类比：mm/readahead.c 预读窗口管理，不是越大越好
         # 分层：active(L1)→直接注入，background(L2)→间接支撑，dormant(L3)→不注入
         try:
-            from wmb import apply_wmb_budget as _wmb_budget, tier_chunks as _wmb_tier
+            from memory_os.runtime.wmb_compat import apply_wmb_budget as _wmb_budget, tier_chunks as _wmb_tier
             _wmb_pairs = [(s, c) for s, c in top_k]  # 格式：(score, chunk)
             # iter1819: wmb_tinydb_bg_relax — tiny_db BM25 分布高度偏斜，
             #   top2 通常仅 10-20% of top1 → background_threshold=0.35 全部落 dormant。
@@ -7733,7 +7726,7 @@ def main():
         # OS 类比：inotify 触发 — 注册的监听事件满足时唤醒等待进程。
         try:
             if priority == "FULL" and not _check_deadline("prospective"):
-                from store_vfs import query_triggers as _query_triggers, fire_trigger as _fire_trigger
+                from memory_os.store.vfs_compat import query_triggers as _query_triggers, fire_trigger as _fire_trigger
                 _trig_matches = _query_triggers(conn, project, query, max_triggers=2)
                 if _trig_matches:
                     _already_ids = {c.get("id") for _, c in top_k}
@@ -7781,7 +7774,7 @@ def main():
                 and _sysctl("mmap_populate.enabled")
                 and not _check_deadline("mmap_populate")):
             try:
-                from store_mm import mmap_populate as _mmap_populate
+                from memory_os.store.mm import mmap_populate as _mmap_populate
                 _existing_ids = {c.get("id", "") for _, c in top_k}
                 _cold_chunk = _mmap_populate(
                     conn, project, _existing_ids, _mmap_populate_counter)
@@ -7813,7 +7806,7 @@ def main():
                 and _sysctl("scan_unevictable.enabled")
                 and not _check_deadline("scan_unevictable")):
             try:
-                from store_mm import scan_unevictable as _scan_unevictable
+                from memory_os.store.mm import scan_unevictable as _scan_unevictable
                 _existing_ids = {c.get("id", "") for _, c in top_k}
                 _dark_pages = _scan_unevictable(conn, project, _existing_ids)
                 for _dp in _dark_pages:
@@ -10763,7 +10756,7 @@ def main():
         try:
             _graph_seed_ids = [c["id"] for _, c in top_k]
             if _graph_seed_ids:
-                from store_graph import expand_with_neighbors, ensure_graph_schema
+                from memory_os.store.graph import expand_with_neighbors, ensure_graph_schema
                 ensure_graph_schema(conn)
                 _graph_neighbors = expand_with_neighbors(
                     conn, _graph_seed_ids, top_n=2, min_weight=0.55,
@@ -10971,19 +10964,19 @@ def main():
             mglru_promote(wconn, accessed_ids)  # 迭代45：MGLRU promote
             # 迭代515：userfaultfd — import chunk 首次命中时 promote
             try:
-                from store_mm import userfaultfd_promote as _uffd
+                from memory_os.store.mm import userfaultfd_promote as _uffd
                 _uffd(wconn, accessed_ids)
             except Exception:
                 pass
             # iter531：mlock_onfault — ONFAULT chunk 首次命中时升级为 PROTECTED
             try:
-                from store_mm import mlock_onfault_promote as _mop
+                from memory_os.store.mm import mlock_onfault_promote as _mop
                 _mop(wconn, accessed_ids)
             except Exception:
                 pass
             # 迭代511：page_idle clear — 从 idle bitmap 移除被命中的 chunks
             try:
-                from store_mm import page_idle_clear as _pic
+                from memory_os.store.mm import page_idle_clear as _pic
                 _pic(accessed_ids, project)
             except Exception:
                 pass
@@ -10991,7 +10984,7 @@ def main():
             # ── 迭代311-A：Reconsolidation — 召回触发 importance 强化 ────────
             # OS 类比：ARC T2 晋升 — 被反复命中的页面从 T1 晋升，淘汰优先级降低
             try:
-                from store_vfs import reconsolidate as _reconsolidate
+                from memory_os.store.vfs_compat import reconsolidate as _reconsolidate
                 _rc_n = _reconsolidate(wconn, accessed_ids, query=query, project=project)
                 if _rc_n:
                     _deferred.log(DMESG_DEBUG, "retriever",
@@ -11060,7 +11053,7 @@ def main():
             # 连续 3 次 duration_ms > 60ms → 降低 oversample_factor（3→2）减少候选池
             # 连续 3 次 duration_ms < 30ms → 恢复 oversample_factor（2→3）提升召回率
             try:
-                from config import sysctl_set as _sysctl_set
+                from memory_os.config.sysctl import sysctl_set as _sysctl_set
                 _gov_key = "retriever.oversample_factor"
                 _cur_factor = _sysctl(_gov_key) or 3
                 if duration_ms > 60:

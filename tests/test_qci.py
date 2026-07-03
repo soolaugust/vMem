@@ -21,7 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent / "hooks"))
 
-from scorer import retrieval_score
+from memory_os.core.scorer import retrieval_score
 from datetime import datetime, timezone
 
 

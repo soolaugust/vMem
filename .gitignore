@@ -5,16 +5,26 @@ __pycache__/
 *.db-wal
 *.db-shm
 *.log
+*.aux
+*.bbl
+*.blg
+*.out
 *.sock
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.serena/
 .coverage
 htmlcov/
 dist/
 build/
 *.egg-info/
 .env
-# Large benchmark data files
+# Large/generated artifacts
 benchmarks/longmemeval/data/
+assets/*.deb
+paper/*.pdf
+paper/*.tar.gz
 
 # Local scripts (not for public repo)
-push-github.sh
+scripts/push-github.sh

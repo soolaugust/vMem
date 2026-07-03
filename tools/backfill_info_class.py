@@ -28,8 +28,8 @@ from datetime import datetime, timezone
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
 
-from store import open_db, ensure_schema
-from store_vfs import classify_memory_type
+from memory_os.store.api import open_db, ensure_schema
+from memory_os.store.vfs_compat import classify_memory_type
 
 
 def _get_current_distribution(conn) -> dict:

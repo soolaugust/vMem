@@ -64,7 +64,7 @@ from typing import Optional
 
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
-from config import get as _sysctl
+from memory_os.config.sysctl import get as _sysctl
 
 # ── 常量 ──────────────────────────────────────────────────────────────────────
 MEMORY_OS_DIR = Path.home() / ".claude" / "memory-os"
@@ -313,10 +313,10 @@ def _do_prefetch(
     error = False
 
     try:
-        from agent_working_set import registry
+        from memory_os.runtime.workspace.agent_working_set_compat import registry
         from hooks.knowledge_router import scatter_gather_route
-        from store import open_db, ensure_schema
-        from schema import MemoryChunk
+        from memory_os.store.api import open_db, ensure_schema
+        from memory_os.core.schema import MemoryChunk
 
         ws = registry.get_or_create(session_id, project)
 
@@ -476,7 +476,7 @@ def main():
 
     # 推导 project
     try:
-        from utils import resolve_project_id
+        from memory_os.core.utils import resolve_project_id
         project = resolve_project_id()
     except Exception:
         project = "unknown"

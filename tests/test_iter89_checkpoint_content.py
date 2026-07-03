@@ -20,9 +20,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from store_core import ensure_schema
-from store_criu import checkpoint_dump, checkpoint_restore
-from store_swap import swap_out
+from memory_os.store.core import ensure_schema
+from memory_os.store.criu import checkpoint_dump, checkpoint_restore
+from memory_os.store.swap import swap_out
 
 
 def _make_conn():

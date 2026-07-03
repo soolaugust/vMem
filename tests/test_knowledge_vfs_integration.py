@@ -25,7 +25,7 @@ os.environ.setdefault("CLAUDE_CWD", str(__import__("pathlib").Path(__file__).par
 
 def test_vfs_initialization():
     """测试 VFS 初始化和全局单例"""
-    from knowledge_vfs_init import init_knowledge_vfs
+    from memory_os.vfs.knowledge_init_compat import init_knowledge_vfs
 
     # 初始化
     vfs = init_knowledge_vfs()
@@ -42,7 +42,7 @@ def test_vfs_initialization():
 
 def test_knowledge_router_compatibility():
     """测试与 knowledge_router 的 API 兼容性"""
-    from knowledge_vfs_init import init_knowledge_vfs, search, format_for_context
+    from memory_os.vfs.knowledge_init_compat import init_knowledge_vfs, search, format_for_context
 
     # 初始化
     init_knowledge_vfs()
@@ -82,7 +82,7 @@ def test_knowledge_router_compatibility():
 
 def test_api_return_format():
     """验证 API 返回格式与 knowledge_router 兼容"""
-    from knowledge_vfs_init import init_knowledge_vfs, search
+    from memory_os.vfs.knowledge_init_compat import init_knowledge_vfs, search
 
     init_knowledge_vfs()
 
@@ -105,7 +105,7 @@ def test_api_return_format():
 
 def test_read_write_interface():
     """测试读写接口"""
-    from knowledge_vfs_init import init_knowledge_vfs, write
+    from memory_os.vfs.knowledge_init_compat import init_knowledge_vfs, write
 
     init_knowledge_vfs()
 
@@ -133,7 +133,7 @@ def test_read_write_interface():
 
 def test_multi_source_search():
     """测试跨多源搜索"""
-    from knowledge_vfs_init import init_knowledge_vfs, search
+    from memory_os.vfs.knowledge_init_compat import init_knowledge_vfs, search
 
     init_knowledge_vfs()
 
@@ -162,7 +162,7 @@ def test_multi_source_search():
 
 def test_timeout_handling():
     """测试超时处理"""
-    from knowledge_vfs_init import init_knowledge_vfs, search
+    from memory_os.vfs.knowledge_init_compat import init_knowledge_vfs, search
 
     init_knowledge_vfs()
 
@@ -188,7 +188,7 @@ def test_timeout_handling():
 def test_cache_hit():
     """测试缓存命中情况"""
     import time
-    from knowledge_vfs_init import init_knowledge_vfs, search
+    from memory_os.vfs.knowledge_init_compat import init_knowledge_vfs, search
 
     init_knowledge_vfs()
 
@@ -220,7 +220,7 @@ def test_cache_hit():
 
 def test_error_handling():
     """测试错误处理"""
-    from knowledge_vfs_init import init_knowledge_vfs, search
+    from memory_os.vfs.knowledge_init_compat import init_knowledge_vfs, search
 
     init_knowledge_vfs()
 
@@ -238,7 +238,7 @@ def test_error_handling():
 def test_performance_baseline():
     """性能基准测试（对比目标 100ms）"""
     import time
-    from knowledge_vfs_init import init_knowledge_vfs, search
+    from memory_os.vfs.knowledge_init_compat import init_knowledge_vfs, search
 
     init_knowledge_vfs()
 

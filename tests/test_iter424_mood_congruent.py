@@ -31,15 +31,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store_vfs import (
+from memory_os.store.vfs_compat import (
     ensure_schema,
     compute_emotional_valence,
     apply_emotional_salience,
     fts_search,
 )
-import config
+import memory_os.config.sysctl as config
 
 
 @pytest.fixture
@@ -169,7 +169,7 @@ def test_mc1_negative_congruence_boost():
     MC1: 负面效价 query + 负面效价 chunk → Mood-Congruent Memory 加分。
     通过直接调用 MCM 逻辑验证（不依赖完整 retriever 管道）。
     """
-    from store_vfs import compute_emotional_valence
+    from memory_os.store.vfs_compat import compute_emotional_valence
     query = "崩溃了，严重错误 production down P0"
     chunk_valence = -0.8  # 负面效价 chunk
 

@@ -37,26 +37,26 @@ class TestSchedstat:
         """每个测试用例前清理环境"""
         self._tmpdir = tempfile.mkdtemp()
         self._mock_file = os.path.join(self._tmpdir, "schedstat_state.json")
-        import store_mm
+        import memory_os.store.mm as store_mm
         self._orig_file = store_mm._SCHEDSTAT_FILE
         store_mm._SCHEDSTAT_FILE = self._mock_file
 
     def teardown_method(self):
         """清理临时文件"""
-        import store_mm
+        import memory_os.store.mm as store_mm
         store_mm._SCHEDSTAT_FILE = self._orig_file
         import shutil
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def test_load_missing_file(self):
         """缺失文件返回空状态"""
-        from store_mm import schedstat_load
+        from memory_os.store.mm import schedstat_load
         state = schedstat_load()
         assert state == {"subsystems": {}, "session_count": 0, "boot_times_ms": []}
 
     def test_load_corrupt_file(self):
         """损坏文件返回空状态"""
-        from store_mm import schedstat_load
+        from memory_os.store.mm import schedstat_load
         with open(self._mock_file, "w") as f:
             f.write("not json{{{")
         state = schedstat_load()
@@ -64,7 +64,7 @@ class TestSchedstat:
 
     def test_save_load_roundtrip(self):
         """save → load 数据完整性"""
-        from store_mm import schedstat_load, schedstat_save, schedstat_record_exec
+        from memory_os.store.mm import schedstat_load, schedstat_save, schedstat_record_exec
         state = schedstat_load()
         state = schedstat_record_exec(state, "watchdog", 5.0, True)
         state = schedstat_record_exec(state, "damon_scan", 12.0, False)
@@ -78,7 +78,7 @@ class TestSchedstat:
 
     def test_record_skip_idle(self):
         """timer_slack 空转跳过正确记录"""
-        from store_mm import schedstat_record_skip
+        from memory_os.store.mm import schedstat_record_skip
         state = {"subsystems": {}, "session_count": 0, "boot_times_ms": []}
         state = schedstat_record_skip(state, "shrink_dcache", "idle")
         state = schedstat_record_skip(state, "shrink_dcache", "idle")
@@ -90,7 +90,7 @@ class TestSchedstat:
 
     def test_record_skip_throttle(self):
         """sched_deadline throttle 正确记录"""
-        from store_mm import schedstat_record_skip
+        from memory_os.store.mm import schedstat_record_skip
         state = {"subsystems": {}, "session_count": 0, "boot_times_ms": []}
         state = schedstat_record_skip(state, "sleep_consolidation", "throttle")
         entry = state["subsystems"]["sleep_consolidation"]
@@ -99,7 +99,7 @@ class TestSchedstat:
 
     def test_record_skip_group_throttle(self):
         """cgroup_budget 分组 throttle 正确记录"""
-        from store_mm import schedstat_record_skip
+        from memory_os.store.mm import schedstat_record_skip
         state = {"subsystems": {}, "session_count": 0, "boot_times_ms": []}
         state = schedstat_record_skip(state, "oom_reaper", "group_throttle")
         state = schedstat_record_skip(state, "oom_reaper", "group_throttle")
@@ -111,7 +111,7 @@ class TestSchedstat:
 
     def test_record_exec_accumulates(self):
         """exec 累积 runtime 和 did_work"""
-        from store_mm import schedstat_record_exec
+        from memory_os.store.mm import schedstat_record_exec
         state = {"subsystems": {}, "session_count": 0, "boot_times_ms": []}
         state = schedstat_record_exec(state, "watchdog", 5.0, True)
         state = schedstat_record_exec(state, "watchdog", 3.0, True)
@@ -123,7 +123,7 @@ class TestSchedstat:
 
     def test_record_session_boot_time(self):
         """session boot time 正确追加"""
-        from store_mm import schedstat_record_session
+        from memory_os.store.mm import schedstat_record_session
         state = {"subsystems": {}, "session_count": 0, "boot_times_ms": []}
         state = schedstat_record_session(state, 69.0, max_history=5)
         state = schedstat_record_session(state, 42.0, max_history=5)
@@ -132,7 +132,7 @@ class TestSchedstat:
 
     def test_record_session_ring_buffer_overflow(self):
         """环形缓冲区超出 max_history 时截断"""
-        from store_mm import schedstat_record_session
+        from memory_os.store.mm import schedstat_record_session
         state = {"subsystems": {}, "session_count": 0, "boot_times_ms": []}
         for i in range(10):
             state = schedstat_record_session(state, float(i * 10), max_history=5)
@@ -143,7 +143,7 @@ class TestSchedstat:
 
     def test_report_empty_state(self):
         """空状态 report 不崩溃"""
-        from store_mm import schedstat_report
+        from memory_os.store.mm import schedstat_report
         state = {"subsystems": {}, "session_count": 0, "boot_times_ms": []}
         report = schedstat_report(state)
         assert report["session_count"] == 0
@@ -155,7 +155,7 @@ class TestSchedstat:
 
     def test_report_trend_improving(self):
         """boot time 下降趋势 → improving"""
-        from store_mm import schedstat_report
+        from memory_os.store.mm import schedstat_report
         # 前半高，后半低
         state = {"subsystems": {}, "session_count": 8,
                  "boot_times_ms": [100.0, 95.0, 90.0, 85.0, 60.0, 55.0, 50.0, 45.0]}
@@ -164,7 +164,7 @@ class TestSchedstat:
 
     def test_report_trend_degrading(self):
         """boot time 上升趋势 → degrading"""
-        from store_mm import schedstat_report
+        from memory_os.store.mm import schedstat_report
         state = {"subsystems": {}, "session_count": 8,
                  "boot_times_ms": [40.0, 45.0, 50.0, 55.0, 80.0, 85.0, 90.0, 95.0]}
         report = schedstat_report(state)
@@ -172,7 +172,7 @@ class TestSchedstat:
 
     def test_report_trend_stable(self):
         """boot time 持平 → stable"""
-        from store_mm import schedstat_report
+        from memory_os.store.mm import schedstat_report
         state = {"subsystems": {}, "session_count": 4,
                  "boot_times_ms": [70.0, 72.0, 68.0, 71.0]}
         report = schedstat_report(state)
@@ -180,7 +180,7 @@ class TestSchedstat:
 
     def test_report_skip_breakdown(self):
         """skip_breakdown 各原因累加正确"""
-        from store_mm import schedstat_record_skip, schedstat_report
+        from memory_os.store.mm import schedstat_record_skip, schedstat_report
         state = {"subsystems": {}, "session_count": 0, "boot_times_ms": []}
         state = schedstat_record_skip(state, "a", "idle")
         state = schedstat_record_skip(state, "a", "idle")
@@ -191,7 +191,7 @@ class TestSchedstat:
 
     def test_report_top_idle_sorted(self):
         """top_idle 按 skip_rate 降序"""
-        from store_mm import schedstat_record_skip, schedstat_record_exec, schedstat_report
+        from memory_os.store.mm import schedstat_record_skip, schedstat_record_exec, schedstat_report
         state = {"subsystems": {}, "session_count": 0, "boot_times_ms": []}
         # a: 5 skip, 1 exec → skip_rate = 5/6 = 0.833
         for _ in range(5):
@@ -210,7 +210,7 @@ class TestSchedstat:
 
     def test_report_top_slow_sorted(self):
         """top_slow 按 avg_runtime_ms 降序"""
-        from store_mm import schedstat_record_exec, schedstat_report
+        from memory_os.store.mm import schedstat_record_exec, schedstat_report
         state = {"subsystems": {}, "session_count": 0, "boot_times_ms": []}
         # fast: 2 exec, total 4ms → avg 2ms
         state = schedstat_record_exec(state, "fast", 2.0, True)
@@ -225,7 +225,7 @@ class TestSchedstat:
 
     def test_report_effective_work_rate(self):
         """全局有效工作率计算"""
-        from store_mm import schedstat_record_exec, schedstat_report
+        from memory_os.store.mm import schedstat_record_exec, schedstat_report
         state = {"subsystems": {}, "session_count": 0, "boot_times_ms": []}
         state = schedstat_record_exec(state, "a", 5.0, True)
         state = schedstat_record_exec(state, "a", 5.0, True)
@@ -237,7 +237,7 @@ class TestSchedstat:
 
     def test_blame_format(self):
         """blame 输出包含关键字段"""
-        from store_mm import (schedstat_record_exec, schedstat_record_skip,
+        from memory_os.store.mm import (schedstat_record_exec, schedstat_record_skip,
                               schedstat_record_session, schedstat_blame)
         state = {"subsystems": {}, "session_count": 0, "boot_times_ms": []}
         state = schedstat_record_exec(state, "watchdog", 5.0, True)
@@ -251,7 +251,7 @@ class TestSchedstat:
 
     def test_multi_subsystem_independent(self):
         """多子系统统计互不干扰"""
-        from store_mm import schedstat_record_exec, schedstat_record_skip
+        from memory_os.store.mm import schedstat_record_exec, schedstat_record_skip
         state = {"subsystems": {}, "session_count": 0, "boot_times_ms": []}
         state = schedstat_record_exec(state, "alpha", 10.0, True)
         state = schedstat_record_skip(state, "beta", "idle")
@@ -264,7 +264,7 @@ class TestSchedstat:
 
     def test_empty_entry_structure(self):
         """_schedstat_empty_entry 包含所有必需字段"""
-        from store_mm import _schedstat_empty_entry
+        from memory_os.store.mm import _schedstat_empty_entry
         entry = _schedstat_empty_entry()
         expected_keys = {"exec_count", "skip_total", "skip_idle", "skip_throttle",
                          "skip_group_throttle", "total_runtime_ms", "did_work_count"}

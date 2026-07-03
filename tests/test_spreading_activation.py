@@ -34,9 +34,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent / "hooks"))
 
-import tmpfs  # noqa — 确保 tmpfs 隔离已初始化
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa — 确保 tmpfs 隔离已初始化
 
-from store_vfs import open_db, ensure_schema, insert_edge, query_neighbors, spreading_activate
+from memory_os.store.vfs_compat import open_db, ensure_schema, insert_edge, query_neighbors, spreading_activate
 
 # ─── fixtures ────────────────────────────────────────────────────────────────
 

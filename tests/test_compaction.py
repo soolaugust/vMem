@@ -24,8 +24,8 @@ import uuid
 # 设置 path
 sys.path.insert(0, os.path.dirname(__file__))
 
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
-from store import (
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+from memory_os.store.api import (
     open_db, ensure_schema, insert_chunk, get_project_chunk_count,
     compact_zone, kswapd_scan, delete_chunks,
 )

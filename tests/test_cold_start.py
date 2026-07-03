@@ -23,9 +23,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent / "hooks"))
 
-import tmpfs  # noqa — 设置测试 DB 路径
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa — 设置测试 DB 路径
 
-from config import get as sysctl, sysctl_set
+from memory_os.config.sysctl import get as sysctl, sysctl_set
 
 
 # ──────────────────────────────────────────────────────────────────────

@@ -23,8 +23,8 @@ os.environ["MEMORY_OS_DB"] = os.path.join(_tmpdir, "store.db")
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from store_core import open_db, ensure_schema, insert_chunk, OOM_ADJ_MAX
-from store_mm import put_page, _page_idle_load, _page_idle_save, _PAGE_IDLE_FILE
+from memory_os.store.core import open_db, ensure_schema, insert_chunk, OOM_ADJ_MAX
+from memory_os.store.mm import put_page, _page_idle_load, _page_idle_save, _PAGE_IDLE_FILE
 import unittest
 
 

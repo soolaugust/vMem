@@ -22,7 +22,7 @@ import pytest
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
-from store_vfs import (
+from memory_os.store.vfs_compat import (
     open_db,
     ensure_schema,
     insert_edge,

@@ -35,20 +35,20 @@ class TestCgroupBudget:
         self._tmpdir = tempfile.mkdtemp()
         self._mock_file = Path(self._tmpdir) / "cgroup_budget_state.json"
         # Patch 文件路径
-        import store_mm
+        import memory_os.store.mm as store_mm
         self._orig_file = store_mm._CGROUP_BUDGET_FILE
         store_mm._CGROUP_BUDGET_FILE = self._mock_file
 
     def teardown_method(self):
         """恢复环境"""
-        import store_mm
+        import memory_os.store.mm as store_mm
         store_mm._CGROUP_BUDGET_FILE = self._orig_file
         import shutil
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def test_group_definitions_complete(self):
         """所有分组都有成员，且反向索引正确"""
-        from store_mm import CGROUP_GROUPS, _SUBSYSTEM_TO_GROUP
+        from memory_os.store.mm import CGROUP_GROUPS, _SUBSYSTEM_TO_GROUP
 
         # 每组有成员
         for group, members in CGROUP_GROUPS.items():
@@ -64,7 +64,7 @@ class TestCgroupBudget:
 
     def test_exempt_subsystems_not_in_any_group(self):
         """CLOCK_REALTIME 强制执行子系统不属于任何 cgroup"""
-        from store_mm import _SUBSYSTEM_TO_GROUP, _CLOCK_REALTIME_SUBSYSTEMS
+        from memory_os.store.mm import _SUBSYSTEM_TO_GROUP, _CLOCK_REALTIME_SUBSYSTEMS
 
         for exempt in _CLOCK_REALTIME_SUBSYSTEMS:
             assert exempt not in _SUBSYSTEM_TO_GROUP, \
@@ -72,20 +72,20 @@ class TestCgroupBudget:
 
     def test_load_missing_file(self):
         """缺失文件返回空 dict"""
-        from store_mm import cgroup_budget_load
+        from memory_os.store.mm import cgroup_budget_load
         state = cgroup_budget_load()
         assert state == {}
 
     def test_load_corrupt_file(self):
         """损坏文件返回空 dict"""
-        from store_mm import cgroup_budget_load
+        from memory_os.store.mm import cgroup_budget_load
         self._mock_file.write_text("not json {{{")
         state = cgroup_budget_load()
         assert state == {}
 
     def test_save_load_roundtrip(self):
         """保存/加载 roundtrip 正确（运行时字段被清除）"""
-        from store_mm import cgroup_budget_save, cgroup_budget_load
+        from memory_os.store.mm import cgroup_budget_save, cgroup_budget_load
 
         state = {
             "reclaim": {"ema_ms": 45.5, "throttle_sessions": 1, "samples": 3, "consumed_ms": 30.0},
@@ -104,7 +104,7 @@ class TestCgroupBudget:
 
     def test_tick_decrements(self):
         """tick 递减 throttle_sessions"""
-        from store_mm import cgroup_budget_tick
+        from memory_os.store.mm import cgroup_budget_tick
 
         state = {
             "reclaim": {"ema_ms": 80.0, "throttle_sessions": 2, "samples": 5, "consumed_ms": 0.0},
@@ -119,7 +119,7 @@ class TestCgroupBudget:
 
     def test_should_throttle_history(self):
         """历史 throttle 阻止组内子系统"""
-        from store_mm import cgroup_budget_should_throttle
+        from memory_os.store.mm import cgroup_budget_should_throttle
 
         state = {
             "reclaim": {"ema_ms": 80.0, "throttle_sessions": 2, "samples": 5, "consumed_ms": 0.0},
@@ -137,7 +137,7 @@ class TestCgroupBudget:
         """当前 session 实时预算耗尽"""
         mock_cfg.return_value = 60.0  # group_budget_ms = 60
 
-        from store_mm import cgroup_budget_should_throttle
+        from memory_os.store.mm import cgroup_budget_should_throttle
 
         state = {
             "reclaim": {"ema_ms": 40.0, "throttle_sessions": 0, "samples": 5, "consumed_ms": 65.0},
@@ -147,7 +147,7 @@ class TestCgroupBudget:
 
     def test_consume_accumulates(self):
         """consume 正确累加到组"""
-        from store_mm import cgroup_budget_consume
+        from memory_os.store.mm import cgroup_budget_consume
 
         state = {}
         state = cgroup_budget_consume(state, "shrink_dcache", 15.0)
@@ -158,7 +158,7 @@ class TestCgroupBudget:
 
     def test_consume_different_groups_independent(self):
         """不同组的 consume 独立"""
-        from store_mm import cgroup_budget_consume
+        from memory_os.store.mm import cgroup_budget_consume
 
         state = {}
         state = cgroup_budget_consume(state, "shrink_dcache", 20.0)  # reclaim
@@ -169,7 +169,7 @@ class TestCgroupBudget:
 
     def test_consume_exempt_subsystem_noop(self):
         """豁免子系统 consume 无效果"""
-        from store_mm import cgroup_budget_consume
+        from memory_os.store.mm import cgroup_budget_consume
 
         state = {}
         state = cgroup_budget_consume(state, "watchdog", 50.0)
@@ -181,7 +181,7 @@ class TestCgroupBudget:
         """settle EMA 收敛到稳定值"""
         mock_cfg.return_value = 60.0  # group_budget_ms = 60
 
-        from store_mm import cgroup_budget_settle
+        from memory_os.store.mm import cgroup_budget_settle
 
         state = {}
         # 连续 5 次输入 50ms → EMA 应收敛到 ~50ms
@@ -203,7 +203,7 @@ class TestCgroupBudget:
             return 60.0
         mock_cfg.side_effect = cfg_side_effect
 
-        from store_mm import cgroup_budget_settle
+        from memory_os.store.mm import cgroup_budget_settle
 
         state = {}
         # 连续输入 80ms（> budget 60ms）
@@ -226,7 +226,7 @@ class TestCgroupBudget:
             return 60.0
         mock_cfg.side_effect = cfg_side_effect
 
-        from store_mm import cgroup_budget_settle
+        from memory_os.store.mm import cgroup_budget_settle
 
         state = {
             "reclaim": {"ema_ms": 80.0, "throttle_sessions": 2, "samples": 5, "consumed_ms": 0.0}
@@ -250,7 +250,7 @@ class TestCgroupBudget:
             return 60.0
         mock_cfg.side_effect = cfg_side_effect
 
-        from store_mm import cgroup_budget_settle
+        from memory_os.store.mm import cgroup_budget_settle
 
         state = {}
         # 第一个样本 200ms（远超 budget），但只有 1 sample
@@ -260,7 +260,7 @@ class TestCgroupBudget:
 
     def test_stats_accuracy(self):
         """stats 返回正确统计"""
-        from store_mm import cgroup_budget_stats
+        from memory_os.store.mm import cgroup_budget_stats
 
         state = {
             "reclaim": {"ema_ms": 80.0, "throttle_sessions": 2, "samples": 5, "consumed_ms": 0.0},
@@ -279,7 +279,7 @@ class TestCgroupBudget:
 
     def test_multi_group_independence(self):
         """一组超标不影响其他组"""
-        from store_mm import cgroup_budget_should_throttle
+        from memory_os.store.mm import cgroup_budget_should_throttle
 
         state = {
             "reclaim": {"ema_ms": 80.0, "throttle_sessions": 2, "samples": 5, "consumed_ms": 0.0},
@@ -293,7 +293,7 @@ class TestCgroupBudget:
 
     def test_empty_state_operations(self):
         """空状态下各操作不出错"""
-        from store_mm import (cgroup_budget_should_throttle, cgroup_budget_consume,
+        from memory_os.store.mm import (cgroup_budget_should_throttle, cgroup_budget_consume,
                              cgroup_budget_tick, cgroup_budget_stats)
 
         state = {}

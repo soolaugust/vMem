@@ -12,10 +12,10 @@ from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
 sys.path.insert(0, str(Path(__file__).parent))
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
-from store import (open_db, ensure_schema, insert_chunk, get_project_chunk_count,
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+from memory_os.store.api import (open_db, ensure_schema, insert_chunk, get_project_chunk_count,
                    evict_lowest_retention, get_chunk_count, delete_chunks)
-from schema import MemoryChunk
+from memory_os.core.schema import MemoryChunk
 
 TEST_DB = Path("/tmp/test_cgroups_quota.db")
 PROJECT_A = "test_project_a"

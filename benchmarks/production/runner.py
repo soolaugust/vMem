@@ -116,7 +116,7 @@ def _check_package_metadata(ctx: BenchContext) -> Check:
 
 
 def _check_doctor(ctx: BenchContext) -> Check:
-    result = run_cmd([sys.executable, "mcp_memory_lookup.py", "doctor", "--json"], env={"MEMORY_OS_DIR": str(ctx.memory_dir)})
+    result = run_cmd([sys.executable, "-m", "memory_os.cli.mcp_memory_lookup", "doctor", "--json"], env={"MEMORY_OS_DIR": str(ctx.memory_dir)})
     ok = result.returncode == 0
     payload = json.loads(result.stdout) if result.stdout.strip().startswith("{") else {}
     return Check(
@@ -136,8 +136,8 @@ def _check_doctor(ctx: BenchContext) -> Check:
 def _check_install_repair(ctx: BenchContext) -> Check:
     settings = ctx.temp / "settings.json"
     settings.write_text(json.dumps({"hooks": {"UserPromptSubmit": []}}, ensure_ascii=False), encoding="utf-8")
-    first = run_cmd([sys.executable, "mcp_memory_lookup.py", "install", "--settings", str(settings), "--json"])
-    second = run_cmd([sys.executable, "mcp_memory_lookup.py", "repair", "--settings", str(settings), "--json"])
+    first = run_cmd([sys.executable, "-m", "memory_os.cli.mcp_memory_lookup", "install", "--settings", str(settings), "--json"])
+    second = run_cmd([sys.executable, "-m", "memory_os.cli.mcp_memory_lookup", "repair", "--settings", str(settings), "--json"])
     first_payload = json.loads(first.stdout or "{}")
     second_payload = json.loads(second.stdout or "{}")
     data = json.loads(settings.read_text(encoding="utf-8"))
@@ -177,17 +177,32 @@ def _hard_overflow_payload(ctx: BenchContext) -> tuple[dict[str, Any], Path]:
 def _check_hard_overflow(ctx: BenchContext) -> Check:
     payload, _ = _hard_overflow_payload(ctx)
     pressure = json.loads((ctx.memory_dir / "context_pressure_state.json").read_text(encoding="utf-8"))
-    ok = payload.get("decision") == "approve" and pressure.get("last_pressure_level") == "critical"
+    mode = json.loads((ctx.memory_dir / "context_mode_state.json").read_text(encoding="utf-8"))
+    working_set = ctx.memory_dir / "working_set" / "current.json"
+    notice = payload.get("hookSpecificOutput", {}).get("additionalContext", "")
+    ok = (
+        payload.get("decision") == "approve"
+        and pressure.get("last_pressure_level") == "critical"
+        and mode.get("mode") == "working_set"
+        and working_set.exists()
+        and 0 < len(notice) <= 1200
+    )
     return Check(
-        name="context_hard_overflow_no_block",
-        title="Hard context overflow approves user turn",
+        name="context_hard_overflow_enters_working_set",
+        title="Hard context overflow enters working-set mode",
         category="context_safety",
         ok=ok,
-        message="hard overflow becomes critical pressure without blocking" if ok else "hard overflow did not produce approve+critical pressure",
-        value={"decision": payload.get("decision"), "pressure": pressure.get("last_pressure_level")},
-        threshold="decision=approve, pressure=critical",
-        impact="vMem manages context pressure invisibly instead of stopping the user.",
-        fix="Keep prompt_budget_guard approve-only and write critical pressure for downstream shedding.",
+        message="hard overflow triggers bounded working-set reclaim without blocking" if ok else "hard overflow did not enter bounded working-set mode",
+        value={
+            "decision": payload.get("decision"),
+            "pressure": pressure.get("last_pressure_level"),
+            "mode": mode.get("mode"),
+            "working_set_exists": working_set.exists(),
+            "notice_chars": len(notice),
+        },
+        threshold="decision=approve, pressure=critical, mode=working_set, notice<=1200",
+        impact="vMem manages context pressure with OS-style working-set reclaim instead of stopping the user or sending an overlarge request blindly.",
+        fix="Make prompt_budget_guard write working_set state, shed optional context, and emit only bounded recovery context under hard pressure.",
         gate=True,
     )
 
@@ -215,7 +230,7 @@ def _check_retriever_shed(ctx: BenchContext) -> Check:
 def _check_no_db(ctx: BenchContext) -> Check:
     empty = ctx.temp / "empty-memory"
     empty.mkdir()
-    result = run_cmd([sys.executable, "production_assertions.py", "--json"], env={"MEMORY_OS_DIR": str(empty)})
+    result = run_cmd([sys.executable, "-m", "memory_os.observability.production_assertions", "--json"], env={"MEMORY_OS_DIR": str(empty)})
     payload = json.loads(result.stdout or "{}")
     ok = result.returncode == 1 and payload.get("status") == "DEGRADED" and "timestamp" in payload and "duration_ms" in payload.get("summary", {})
     return Check(
@@ -233,7 +248,7 @@ def _check_no_db(ctx: BenchContext) -> Check:
 
 
 def _check_public_hygiene(ctx: BenchContext) -> Check:
-    roots = ["README.md", "README.zh.md", "llms.txt", "docs", "marketing", "paper/main.tex", "pyproject.toml", "glama.json", ".mcp.json", "hooks/hooks.json", "vmem_doctor.py", "production_assertions.py"]
+    roots = ["README.md", "README.zh.md", "llms.txt", "docs", "marketing", "paper/main.tex", "pyproject.toml", "glama.json", ".mcp.json", "hooks/hooks.json", "memory_os/cli/vmem_doctor.py", "memory_os/observability/production_assertions.py"]
     hits: list[str] = []
     for item in roots:
         root = ctx.root / item
@@ -262,7 +277,7 @@ CHECKS: list[Callable[[BenchContext], Check]] = [
     timed("package_metadata_ok", "Package metadata exposes vmem and legacy CLI", "install", _check_package_metadata),
     timed("doctor_passes", "Doctor passes on a fresh writable memory dir", "install", _check_doctor),
     timed("install_repair_idempotent", "Install/repair are idempotent", "install", _check_install_repair),
-    timed("context_hard_overflow_no_block", "Hard context overflow approves user turn", "context_safety", _check_hard_overflow),
+    timed("context_hard_overflow_enters_working_set", "Hard context overflow enters working-set mode", "context_safety", _check_hard_overflow),
     timed("critical_pressure_sheds_retriever", "Critical pressure sheds optional retrieval context", "context_safety", _check_retriever_shed),
     timed("fault_no_db_degrades", "No store.db degrades instead of crashing", "fault", _check_no_db),
     timed("public_hygiene_passes", "Public files contain no internal strings", "hygiene", _check_public_hygiene),
@@ -325,8 +340,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "## Value At A Glance",
         "",
-        "- **No user-blocking on context pressure:** hard overflow is converted to critical pressure, not a blocked turn.",
-        "- **API 400 prevention path:** critical pressure makes retriever fallback emit zero additional context and verifies daemon shedding is wired before Stage 0.",
+        "- **OS-style context reclaim:** hard overflow enters bounded working-set mode instead of blocking the user.",
+        "- **API 400 prevention path:** critical pressure sheds optional context and emits only a bounded working-set notice.",
         "- **Operational readiness:** doctor, install, repair, no-db degraded reports, and public hygiene are checked as release gates.",
         "",
         "## Hard Gates",

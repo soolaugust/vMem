@@ -19,7 +19,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
 os.chdir(_ROOT)
 
-from store_mm import _InitcallTimer, initcall_debug
+from memory_os.store.mm import _InitcallTimer, initcall_debug
 
 
 # ── Test 1: _InitcallTimer 基本计时 ──
@@ -144,7 +144,7 @@ def test_milestone_based_timing():
 
 def test_config_tunable():
     """initcall_debug.enabled 和 initcall_debug.top_n 存在于 config 注册表中。"""
-    from config import get as _cfg
+    from memory_os.config.sysctl import get as _cfg
     assert _cfg("initcall_debug.enabled") is True
     assert _cfg("initcall_debug.top_n") == 5
 

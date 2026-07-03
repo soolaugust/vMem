@@ -21,7 +21,7 @@ sys.path.insert(0, str(_ROOT))
 
 def _make_conn(tmpdir: Path) -> sqlite3.Connection:
     """Helper: create a temp store.db and ensure schema."""
-    from store import open_db, ensure_schema
+    from memory_os.store.api import open_db, ensure_schema
     db_path = tmpdir / "store.db"
     import os
     orig = os.environ.get("MEMORY_OS_DIR", "")
@@ -62,7 +62,7 @@ def test_sa1_port_summary_binds_web_service_config():
         conn = _make_conn(tmpdir)
         project = "test:sa1"
 
-        from store_vfs import anchor_chunk_schema
+        from memory_os.store.vfs_compat import anchor_chunk_schema
         # Port configuration pattern
         n = anchor_chunk_schema(conn, "c_sa1_1", "后端服务端口 port=8080 启动", project)
         assert n > 0, f"Expected at least 1 schema binding, got {n}"
@@ -85,7 +85,7 @@ def test_sa1b_localhost_port_pattern():
         conn = _make_conn(tmpdir)
         project = "test:sa1b"
 
-        from store_vfs import anchor_chunk_schema
+        from memory_os.store.vfs_compat import anchor_chunk_schema
         n = anchor_chunk_schema(conn, "c_sa1b", "前端服务运行在 localhost:3000", project)
         assert n > 0
 
@@ -107,7 +107,7 @@ def test_sa2_error_summary_binds_error_pattern():
         conn = _make_conn(tmpdir)
         project = "test:sa2"
 
-        from store_vfs import anchor_chunk_schema
+        from memory_os.store.vfs_compat import anchor_chunk_schema
         n = anchor_chunk_schema(conn, "c_sa2_1", "AttributeError: NoneType has no attribute 'id'", project)
         assert n > 0
 
@@ -130,7 +130,7 @@ def test_sa3_generic_summary_no_binding():
         conn = _make_conn(tmpdir)
         project = "test:sa3"
 
-        from store_vfs import anchor_chunk_schema
+        from memory_os.store.vfs_compat import anchor_chunk_schema
         n = anchor_chunk_schema(conn, "c_sa3_1",
                                  "用户询问了关于数据处理流程的问题", project)
         # Generic summary without any schema keywords
@@ -153,7 +153,7 @@ def test_sa4_schema_spread_activates_related():
         conn = _make_conn(tmpdir)
         project = "test:sa4"
 
-        from store_vfs import anchor_chunk_schema, schema_spread_activate
+        from memory_os.store.vfs_compat import anchor_chunk_schema, schema_spread_activate
 
         # Insert 3 chunks in web_service_config schema
         _insert_chunk(conn, "c_hit", project,
@@ -194,7 +194,7 @@ def test_sa5_existing_ids_excluded():
         conn = _make_conn(tmpdir)
         project = "test:sa5"
 
-        from store_vfs import anchor_chunk_schema, schema_spread_activate
+        from memory_os.store.vfs_compat import anchor_chunk_schema, schema_spread_activate
 
         _insert_chunk(conn, "c_a", project, "后端端口 port=8080", importance=0.8)
         _insert_chunk(conn, "c_b", project, "前端服务 localhost:3000", importance=0.75)
@@ -226,7 +226,7 @@ def test_sa6_anchor_chunk_schema_idempotent():
         conn = _make_conn(tmpdir)
         project = "test:sa6"
 
-        from store_vfs import anchor_chunk_schema
+        from memory_os.store.vfs_compat import anchor_chunk_schema
 
         summary = "后端服务端口 port=8080"
         # Call 3 times
@@ -255,7 +255,7 @@ def test_sa7_design_decision_schema():
         conn = _make_conn(tmpdir)
         project = "test:sa7"
 
-        from store_vfs import anchor_chunk_schema
+        from memory_os.store.vfs_compat import anchor_chunk_schema
         n = anchor_chunk_schema(conn, "c_sa7_1",
                                  "选择 PostgreSQL 因为需要事务支持", project)
         assert n > 0

@@ -19,9 +19,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa: E402 — must be before store imports
-from store_vfs import ensure_schema, insert_chunk, writeback_pressure
-import config
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402 — must be before store imports
+from memory_os.store.vfs_compat import ensure_schema, insert_chunk, writeback_pressure
+import memory_os.config.sysctl as config
 
 
 @pytest.fixture

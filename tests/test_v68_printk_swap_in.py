@@ -9,7 +9,7 @@
 4. resume-task-state.py dmesg 记录包含 elapsed_ms 和 restore_source
 5. retriever.py top_k_data 包含 chunk_type 字段
 """
-import tmpfs  # noqa: F401 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 测试隔离
 
 import json
 import os
@@ -106,7 +106,7 @@ class TestResumeDmesgEnrichment(unittest.TestCase):
 
     def test_dmesg_contains_elapsed_ms(self):
         """dmesg extra 应包含 elapsed_ms 字段"""
-        from store import open_db, ensure_schema, dmesg_log, dmesg_read, DMESG_INFO
+        from memory_os.store.api import open_db, ensure_schema, dmesg_log, dmesg_read, DMESG_INFO
 
         conn = open_db()
         ensure_schema(conn)
@@ -130,7 +130,7 @@ class TestResumeDmesgEnrichment(unittest.TestCase):
 
     def test_dmesg_empty_restore_is_warn(self):
         """空恢复应记录 WARN 级别 dmesg"""
-        from store import open_db, ensure_schema, dmesg_log, dmesg_read, DMESG_WARN
+        from memory_os.store.api import open_db, ensure_schema, dmesg_log, dmesg_read, DMESG_WARN
 
         conn = open_db()
         ensure_schema(conn)

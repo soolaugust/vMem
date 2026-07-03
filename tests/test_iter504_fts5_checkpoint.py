@@ -13,18 +13,18 @@ T7: _fts5_sync_chunk 幂等性 — 多次调用结果一致
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: F401 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 测试隔离
 
 import sqlite3
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from store_vfs import (
+from memory_os.store.vfs_compat import (
     open_db, ensure_schema, insert_chunk, fts5_checkpoint,
     _fts5_sync_chunk, _cjk_tokenize, _normalize_structured_summary,
     delete_chunks, merge_similar,
 )
-from schema import MemoryChunk
+from memory_os.core.schema import MemoryChunk
 
 
 def _make_chunk(summary="test decision", chunk_type="decision", project="test_proj"):

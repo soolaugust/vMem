@@ -17,10 +17,10 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ["MEMORY_OS_TESTING"] = "1"
 
-import tmpfs  # noqa: F401 — 自动 mount tmpfs
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 自动 mount tmpfs
 
-from store_core import open_db, ensure_schema, MEMORY_OS_DIR
-from store_mm import raise_softirq, consume_softirq, _SOFTIRQ_FLAG
+from memory_os.store.core import open_db, ensure_schema, MEMORY_OS_DIR
+from memory_os.store.mm import raise_softirq, consume_softirq, _SOFTIRQ_FLAG
 
 
 import pytest
@@ -106,7 +106,7 @@ def test_raise_softirq_disabled():
     conn = _setup_db_with_chunks(n_total=10, n_zero_access=8, n_zombies=5, project="test_proj")
 
     # 临时修改 config
-    import config
+    import memory_os.config.sysctl as config
     orig = config._REGISTRY.get("ksoftirqd.enabled")
     config._REGISTRY["ksoftirqd.enabled"] = (False, bool, None, None, None, "test")
     try:
@@ -218,7 +218,7 @@ def test_raise_softirq_threshold_tunable():
     """T12: zero_threshold sysctl 可调"""
     conn = _setup_db_with_chunks(n_total=10, n_zero_access=3, n_zombies=0, project="test_proj")
 
-    import config
+    import memory_os.config.sysctl as config
     # 默认 0.40 → 30% 零访问不触发
     result1 = raise_softirq(conn, "test_proj")
     assert result1["raised"] is False

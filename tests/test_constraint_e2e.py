@@ -8,7 +8,7 @@ test_constraint_e2e.py — 迭代98: Design Constraint 端到端集成测试
   3. 检索（retriever.py）— FTS5 搜索 + 强制注入
   4. 注入（retriever.py）— 在提示词中显示 ⚠️ 约束 + 置信度降级
 """
-import tmpfs  # noqa: F401
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401
 import sys
 import json
 from pathlib import Path
@@ -17,8 +17,8 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent))
 
 from hooks.extractor import _extract_constraints, _is_quality_chunk
-from store import open_db, ensure_schema, insert_chunk, get_chunks
-from schema import MemoryChunk
+from memory_os.store.api import open_db, ensure_schema, insert_chunk, get_chunks
+from memory_os.core.schema import MemoryChunk
 import hashlib
 
 
@@ -87,7 +87,7 @@ def test_e2e_sched_ext_case():
         # 模拟用户查询（直接用约束中的关键词）
         query = "SCX_ENQ_IMMED EXITING"
 
-        from store import fts_search
+        from memory_os.store.api import fts_search
         results = fts_search(conn, query, project, top_k=10)
         constraint_results = [r for r in results if r["chunk_type"] == "design_constraint"]
 
@@ -128,7 +128,7 @@ def test_e2e_sched_ext_case():
 
         # Step 6: 验证强制注入逻辑
         # 模拟 retriever.py 的强制注入代码
-        from scorer import retrieval_score
+        from memory_os.core.scorer import retrieval_score
 
         final = []
         for chunk in all_chunks:
@@ -250,7 +250,7 @@ def test_constraint_confidence_degradation():
         # 查询词完全不相关
         query = "weather forecast python"
 
-        from store import fts_search
+        from memory_os.store.api import fts_search
         results = fts_search(conn, query, project, top_k=10)
 
         # 约束不应该在 FTS5 结果中（因为词不匹配）

@@ -20,9 +20,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent / "hooks"))
 
-import tmpfs  # noqa — 必须在 store 之前 import，设置测试 DB 路径
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa — 必须在 store 之前 import，设置测试 DB 路径
 
-from scorer import tmv_saturation_discount
+from memory_os.core.scorer import tmv_saturation_discount
 
 
 # ──────────────────────────────────────────────────────────────────────

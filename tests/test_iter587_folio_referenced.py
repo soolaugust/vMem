@@ -111,7 +111,7 @@ class TestBasicSpread:
 
     def test_spreads_uniform_chunks(self, cfg):
         """Chunks all at same importance should get spread."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": f"c{i}", "importance": 0.75, "access_count": i * 2,
              "created_at": (datetime.now(timezone.utc) - timedelta(days=i)).isoformat()}
@@ -125,7 +125,7 @@ class TestBasicSpread:
 
     def test_increases_pearson_correlation(self, cfg):
         """After spread, importance should correlate better with access."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         # Mix of access patterns: some high access at low importance
         chunks = [
             {"id": f"c{i}", "importance": 0.70 + (14 - i) * 0.005,
@@ -141,7 +141,7 @@ class TestBasicSpread:
 
     def test_respects_cum_score(self, cfg):
         """Chunks with high cumulative retrieval scores get higher importance."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": f"c{i}", "importance": 0.70, "access_count": 1,
              "created_at": (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()}
@@ -177,7 +177,7 @@ class TestProtection:
 
     def test_skips_mlock(self, cfg):
         """mlock chunks (oom_adj <= -500) are not modified."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": "mlock1", "importance": 0.60, "access_count": 0,
              "oom_adj": -1000,
@@ -198,7 +198,7 @@ class TestProtection:
 
     def test_skips_task_state(self, cfg):
         """task_state type chunks are not modified."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": "ts1", "importance": 0.65, "chunk_type": "task_state",
              "access_count": 5,
@@ -218,7 +218,7 @@ class TestProtection:
 
     def test_skips_prompt_context(self, cfg):
         """prompt_context type chunks are not modified."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": "pc1", "importance": 0.70, "chunk_type": "prompt_context",
              "access_count": 3,
@@ -244,7 +244,7 @@ class TestBlendLimits:
 
     def test_max_delta_respected(self, cfg):
         """No single chunk importance changes by more than max_delta."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         # Create chunks with extreme spread in access
         chunks = [
             {"id": f"c{i}", "importance": 0.75,
@@ -272,7 +272,7 @@ class TestBlendLimits:
 
     def test_blend_ratio_gradual(self, cfg):
         """Multiple runs converge gradually, not in one shot."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": f"c{i}", "importance": 0.75, "access_count": i * 3,
              "created_at": (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()}
@@ -292,7 +292,7 @@ class TestBlendLimits:
 
     def test_importance_stays_in_bounds(self, cfg):
         """All chunks stay within [imp_floor, imp_ceil]."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": f"c{i}", "importance": 0.30 + i * 0.05,
              "access_count": i,
@@ -320,7 +320,7 @@ class TestEdgeCases:
     def test_disabled_noop(self, cfg):
         """When disabled, returns zeros without modifying DB."""
         cfg["folio_referenced.enabled"] = False
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": f"c{i}", "importance": 0.75, "access_count": i}
             for i in range(15)
@@ -337,7 +337,7 @@ class TestEdgeCases:
 
     def test_too_few_chunks(self, cfg):
         """Below min_alive_chunks, does nothing."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": f"c{i}", "importance": 0.75, "access_count": i}
             for i in range(5)  # less than min_alive_chunks=10
@@ -349,7 +349,7 @@ class TestEdgeCases:
 
     def test_empty_db(self, cfg):
         """Empty DB returns gracefully."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         conn = _make_db(chunks=[])
         result = folio_referenced(conn, "test")
 
@@ -358,7 +358,7 @@ class TestEdgeCases:
 
     def test_all_protected(self, cfg):
         """All chunks protected → spread=0."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": f"c{i}", "importance": 0.75, "access_count": i,
              "oom_adj": -1000,
@@ -373,7 +373,7 @@ class TestEdgeCases:
 
     def test_no_traces_still_works(self, cfg):
         """Without recall_traces, uses access_count + recency only."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": f"c{i}", "importance": 0.75,
              "access_count": i * 5,
@@ -389,7 +389,7 @@ class TestEdgeCases:
     def test_single_eligible_chunk(self, cfg):
         """Only one eligible + many protected → spread=0 (needs ≥2)."""
         cfg["folio_referenced.min_alive_chunks"] = 3
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": "eligible", "importance": 0.75, "access_count": 5,
              "oom_adj": 0,
@@ -413,7 +413,7 @@ class TestProjectFilter:
 
     def test_project_filter(self, cfg):
         """Only chunks in specified project are modified."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": f"a{i}", "importance": 0.75, "access_count": i,
              "project": "alpha",
@@ -437,7 +437,7 @@ class TestProjectFilter:
 
     def test_global_mode(self, cfg):
         """project=None modifies all projects."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": f"c{i}", "importance": 0.75, "access_count": i,
              "project": "alpha" if i % 2 == 0 else "beta",
@@ -459,7 +459,7 @@ class TestConfigTunables:
         """Higher blend_ratio makes bigger changes per run."""
         cfg["folio_referenced.blend_ratio"] = 0.40
         cfg["folio_referenced.max_delta_per_chunk"] = 0.20  # allow larger moves
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": f"c{i}", "importance": 0.75, "access_count": i * 2,
              "created_at": (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()}
@@ -475,7 +475,7 @@ class TestConfigTunables:
         """Narrow imp_floor/imp_ceil means tighter output range."""
         cfg["folio_referenced.imp_floor"] = 0.60
         cfg["folio_referenced.imp_ceil"] = 0.80
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": f"c{i}", "importance": 0.75, "access_count": i * 3,
              "created_at": (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()}
@@ -494,7 +494,7 @@ class TestConfigTunables:
     def test_config_registered(self):
         """All folio_referenced config keys are registered."""
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-        import config
+        import memory_os.config.sysctl as config
         keys = [
             "folio_referenced.enabled",
             "folio_referenced.blend_ratio",
@@ -519,7 +519,7 @@ class TestProductionSimulation:
 
     def test_production_spread(self, cfg):
         """Simulate production: 92 chunks with realistic distributions."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         import random
         random.seed(42)
 
@@ -562,7 +562,7 @@ class TestProductionSimulation:
 
     def test_idempotent_convergence(self, cfg):
         """Multiple runs converge — changes decrease over time."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": f"c{i}", "importance": 0.75, "access_count": i * 2,
              "created_at": (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()}
@@ -586,7 +586,7 @@ class TestPerformance:
 
     def test_performance_200_chunks(self, cfg):
         """200 chunks should complete in <50ms."""
-        from store_mm import folio_referenced
+        from memory_os.store.mm import folio_referenced
         chunks = [
             {"id": f"c{i}", "importance": 0.70 + (i % 10) * 0.02,
              "access_count": i % 20,
@@ -617,37 +617,37 @@ class TestHelpers:
 
     def test_gini_uniform(self):
         """Uniform values → Gini ≈ 0."""
-        from store_mm import _gini
+        from memory_os.store.mm import _gini
         assert abs(_gini([1.0] * 10)) < 0.01
 
     def test_gini_extreme(self):
         """One high, rest zero → Gini ≈ 0.8+."""
-        from store_mm import _gini
+        from memory_os.store.mm import _gini
         vals = [0.0] * 9 + [1.0]
         assert _gini(vals) >= 0.7
 
     def test_gini_empty(self):
         """Empty list → 0."""
-        from store_mm import _gini
+        from memory_os.store.mm import _gini
         assert _gini([]) == 0.0
 
     def test_pearson_perfect(self):
         """Perfect positive correlation → 1.0."""
-        from store_mm import _pearson
+        from memory_os.store.mm import _pearson
         xs = [1, 2, 3, 4, 5]
         ys = [2, 4, 6, 8, 10]
         assert abs(_pearson(xs, ys) - 1.0) < 0.001
 
     def test_pearson_negative(self):
         """Perfect negative correlation → -1.0."""
-        from store_mm import _pearson
+        from memory_os.store.mm import _pearson
         xs = [1, 2, 3, 4, 5]
         ys = [10, 8, 6, 4, 2]
         assert abs(_pearson(xs, ys) + 1.0) < 0.001
 
     def test_pearson_uncorrelated(self):
         """Constant values → 0."""
-        from store_mm import _pearson
+        from memory_os.store.mm import _pearson
         xs = [1, 2, 3, 4, 5]
         ys = [5, 5, 5, 5, 5]
         assert abs(_pearson(xs, ys)) < 0.001

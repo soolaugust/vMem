@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ['MEMORY_OS_DIR'] = '/tmp/bench_memory_os'
 
-from store_vfs import fts_search, open_db, pin_chunk, unpin_chunk, is_pinned, get_pinned_chunks, ensure_schema
+from memory_os.store.vfs_compat import fts_search, open_db, pin_chunk, unpin_chunk, is_pinned, get_pinned_chunks, ensure_schema
 
 
 def create_test_db(path=None):

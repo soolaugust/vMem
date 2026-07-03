@@ -31,8 +31,8 @@ for p in (str(_MEMOS), str(_HERE)):
 def _build_context() -> str:
     """跑断言，返回需注入上下文的文本（健康则返回 ""）。"""
     try:
-        import production_assertions as pa
-        import assertion_history as ah
+        import memory_os.observability.production_assertions as pa
+        import memory_os.observability.assertion_history_compat as ah
     except Exception as e:
         return ""  # 模块缺失绝不阻塞会话启动
 

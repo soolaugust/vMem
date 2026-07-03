@@ -22,10 +22,10 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store import open_db, ensure_schema
-from store_vfs import insert_chunk
+from memory_os.store.api import open_db, ensure_schema
+from memory_os.store.vfs_compat import insert_chunk
 
 
 def _apply_conf_filter(score: float, chunk: dict) -> float:

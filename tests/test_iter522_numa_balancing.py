@@ -17,9 +17,9 @@ os.environ["MEMORY_OS_DB"] = os.path.join(_tmpdir, "store.db")
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from store import open_db, ensure_schema, insert_chunk, bump_chunk_version
-from store_mm import numa_balancing
-from config import get as _cfg
+from memory_os.store.api import open_db, ensure_schema, insert_chunk, bump_chunk_version
+from memory_os.store.mm import numa_balancing
+from memory_os.config.sysctl import get as _cfg
 from datetime import datetime, timezone, timedelta
 import json
 
@@ -226,7 +226,7 @@ def test_task_state_excluded():
 
 def test_bump_chunk_version():
     """T14: rebalance 后触发 chunk_version bump（TLB 失效）。"""
-    from store_vfs import CHUNK_VERSION_FILE
+    from memory_os.store.vfs_compat import CHUNK_VERSION_FILE
     conn = open_db()
     ensure_schema(conn)
     # 获取当前 version（文件系统）

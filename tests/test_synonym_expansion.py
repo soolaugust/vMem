@@ -22,9 +22,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent / "hooks"))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store_vfs import _fts5_escape, _synonym_expand
+from memory_os.store.vfs_compat import _fts5_escape, _synonym_expand
 
 
 def _get_tokens(query: str) -> set:

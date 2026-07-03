@@ -92,13 +92,13 @@ def _fresh_conn():
 
 def _clear_cache():
     """清理 ratelimit 缓存。"""
-    from store_proc import _ratelimit_cache
+    from memory_os.store.proc import _ratelimit_cache
     _ratelimit_cache.clear()
 
 
 def test_ratelimit_key_structured():
     """结构化消息（field=value）提取相同 key。"""
-    from store_proc import _ratelimit_key
+    from memory_os.store.proc import _ratelimit_key
     k1 = _ratelimit_key("freed=27 dead=27 skip_prot=0 12.4ms")
     k2 = _ratelimit_key("freed=0 dead=0 skip_prot=3 0.1ms")
     assert k1 == k2, f"Same structure should produce same key: {k1} vs {k2}"
@@ -106,7 +106,7 @@ def test_ratelimit_key_structured():
 
 def test_ratelimit_key_unstructured():
     """非结构化消息用前 40 字符作 key。"""
-    from store_proc import _ratelimit_key
+    from memory_os.store.proc import _ratelimit_key
     k1 = _ratelimit_key("session started successfully with no errors at all")
     k2 = _ratelimit_key("session started successfully with no errors at all!!!")
     # 前 40 字符相同
@@ -115,7 +115,7 @@ def test_ratelimit_key_unstructured():
 
 def test_ratelimit_key_different_structure():
     """不同字段结构产生不同 key。"""
-    from store_proc import _ratelimit_key
+    from memory_os.store.proc import _ratelimit_key
     k1 = _ratelimit_key("freed=27 dead=27")
     k2 = _ratelimit_key("promoted=2 demoted=0")
     assert k1 != k2
@@ -123,14 +123,14 @@ def test_ratelimit_key_different_structure():
 
 def test_ratelimit_first_call_allowed():
     """首次调用永不抑制。"""
-    from store_proc import _printk_ratelimit
+    from memory_os.store.proc import _printk_ratelimit
     _clear_cache()
     assert _printk_ratelimit("sub1", "freed=5 dead=5") is False
 
 
 def test_ratelimit_second_call_suppressed():
     """同窗口内第二次同 key 调用被抑制。"""
-    from store_proc import _printk_ratelimit
+    from memory_os.store.proc import _printk_ratelimit
     _clear_cache()
     _printk_ratelimit("sub1", "freed=5 dead=5")
     assert _printk_ratelimit("sub1", "freed=3 dead=3") is True
@@ -138,7 +138,7 @@ def test_ratelimit_second_call_suppressed():
 
 def test_ratelimit_different_subsystem_not_suppressed():
     """不同子系统不交叉抑制。"""
-    from store_proc import _printk_ratelimit
+    from memory_os.store.proc import _printk_ratelimit
     _clear_cache()
     _printk_ratelimit("kfree_rcu", "freed=5 dead=5")
     assert _printk_ratelimit("put_page", "freed=5 dead=5") is False
@@ -146,7 +146,7 @@ def test_ratelimit_different_subsystem_not_suppressed():
 
 def test_ratelimit_window_expiry():
     """窗口过期后允许再次写入。"""
-    from store_proc import _printk_ratelimit, _ratelimit_cache
+    from memory_os.store.proc import _printk_ratelimit, _ratelimit_cache
     _clear_cache()
     _printk_ratelimit("sub_expire", "freed=1 dead=1")
     # 手动修改时间戳模拟过期
@@ -157,7 +157,7 @@ def test_ratelimit_window_expiry():
 
 def test_err_level_never_suppressed():
     """ERR 级别 dmesg_log 永不被抑制。"""
-    from store_proc import DMESG_ERR, dmesg_log
+    from memory_os.store.proc import DMESG_ERR, dmesg_log
     _clear_cache()
     conn = _fresh_conn()
     dmesg_log(conn, DMESG_ERR, "test_err538", "critical error 1")
@@ -169,7 +169,7 @@ def test_err_level_never_suppressed():
 
 def test_warn_level_never_suppressed():
     """WARN 级别 dmesg_log 永不被抑制。"""
-    from store_proc import DMESG_WARN, dmesg_log
+    from memory_os.store.proc import DMESG_WARN, dmesg_log
     _clear_cache()
     conn = _fresh_conn()
     dmesg_log(conn, DMESG_WARN, "test_warn538", "warning 1")
@@ -180,7 +180,7 @@ def test_warn_level_never_suppressed():
 
 def test_info_level_suppressed():
     """INFO 级别重复消息在窗口内被抑制。"""
-    from store_proc import DMESG_INFO, dmesg_log
+    from memory_os.store.proc import DMESG_INFO, dmesg_log
     _clear_cache()
     conn = _fresh_conn()
     dmesg_log(conn, DMESG_INFO, "test_info538", "freed=5 dead=5 skip_prot=0")
@@ -192,7 +192,7 @@ def test_info_level_suppressed():
 
 def test_debug_level_suppressed():
     """DEBUG 级别重复消息在窗口内被抑制。"""
-    from store_proc import DMESG_DEBUG, dmesg_log
+    from memory_os.store.proc import DMESG_DEBUG, dmesg_log
     _clear_cache()
     conn = _fresh_conn()
     dmesg_log(conn, DMESG_DEBUG, "test_dbg538", "scan: total=9 hot=1")
@@ -203,7 +203,7 @@ def test_debug_level_suppressed():
 
 def test_lru_eviction():
     """缓存达到上限时 LRU 淘汰最旧 entry。"""
-    from store_proc import _printk_ratelimit, _ratelimit_cache, _RATELIMIT_CACHE_MAX
+    from memory_os.store.proc import _printk_ratelimit, _ratelimit_cache, _RATELIMIT_CACHE_MAX
     _clear_cache()
     # 填满缓存
     for i in range(_RATELIMIT_CACHE_MAX):
@@ -216,7 +216,7 @@ def test_lru_eviction():
 
 def test_ring_buffer_savings():
     """验证 ratelimit 实际减少 ring buffer 写入数。"""
-    from store_proc import DMESG_INFO, dmesg_log
+    from memory_os.store.proc import DMESG_INFO, dmesg_log
     _clear_cache()
     conn = _fresh_conn()
     # 模拟 10 个 session 的 kfree_rcu 日志
@@ -239,7 +239,7 @@ def test_kfree_rcu_no_internal_dmesg():
             'decision', 'test', 'test dead', 0.1, 0, 0)
     """)
     conn.commit()
-    from store_mm import kfree_rcu
+    from memory_os.store.mm import kfree_rcu
     result = kfree_rcu(conn)
     # kfree_rcu should NOT write to dmesg internally
     count = conn.execute("SELECT COUNT(*) FROM dmesg WHERE subsystem='kfree_rcu'").fetchone()[0]
@@ -259,7 +259,7 @@ def test_put_page_no_internal_dmesg():
             'decision', 'test', 'ue test', 0.0, 5, 0)
     """)
     conn.commit()
-    from store_mm import put_page
+    from memory_os.store.mm import put_page
     result = put_page(conn, "test_proj")
     count = conn.execute("SELECT COUNT(*) FROM dmesg WHERE subsystem='put_page'").fetchone()[0]
     assert count == 0, f"put_page should not write dmesg internally, got {count}"
@@ -267,15 +267,15 @@ def test_put_page_no_internal_dmesg():
 
 def test_config_tunable_exists():
     """config 中 dmesg.ratelimit_interval_s 存在且默认 30。"""
-    from config import get
+    from memory_os.config.sysctl import get
     val = get("dmesg.ratelimit_interval_s")
     assert val == 30, f"Default should be 30, got {val}"
 
 
 def test_config_disable_ratelimit():
     """interval=0 时禁用去重。"""
-    from store_proc import _printk_ratelimit, _ratelimit_cache
-    from config import sysctl_set
+    from memory_os.store.proc import _printk_ratelimit, _ratelimit_cache
+    from memory_os.config.sysctl import sysctl_set
     _clear_cache()
     # 暂时设为 0
     sysctl_set("dmesg.ratelimit_interval_s", 0)

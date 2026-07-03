@@ -27,10 +27,10 @@ OS 类比：Linux workingset.c refault_distance (Johannes Weiner, 2018, kernel 4
   T11: 边界条件 — thrash 恰好等于 threshold → 通过
   T12: 空 recall_counts — 无历史数据时约束正常通过（不误拦）
 """
-import tmpfs  # noqa: F401  — 测试隔离，必须在 store import 之前
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401  — 测试隔离，必须在 store import 之前
 import re
 import pytest
-from config import get as sysctl_get
+from memory_os.config.sysctl import get as sysctl_get
 
 
 # ── 模拟 refault_distance 门控逻辑（从 retriever.py 提取的核心判断） ──
@@ -165,7 +165,7 @@ def test_sysctl_constraint_thrash_max_pct_exists():
 
 def test_sysctl_ranges():
     """tunables 的范围限制合理。"""
-    from config import _REGISTRY
+    from memory_os.config.sysctl import _REGISTRY
     # constraint_min_relevance: [0.0, 0.5]
     entry = _REGISTRY["retriever.constraint_min_relevance"]
     assert entry[2] == 0.0   # lo

@@ -94,7 +94,7 @@ def test_eb4_ranking_with_emotional_boost():
 
 def test_eb5_sysctl_defaults_exist():
     """config.py 中 emotional boost sysctl 已注册"""
-    from config import get as _get
+    from memory_os.config.sysctl import get as _get
     factor = _get("retriever.emotional_boost_factor")
     threshold = _get("retriever.emotional_boost_threshold")
     assert factor is not None, "retriever.emotional_boost_factor sysctl 未注册"

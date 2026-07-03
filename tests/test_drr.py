@@ -130,7 +130,7 @@ class TestDRRFairQueuing(unittest.TestCase):
         """DRR 禁用时退化为纯 score 排序。"""
         os.environ["MEMORY_OS_RETRIEVER_DRR_ENABLED"] = "0"
         # 重新加载 config 缓存
-        from config import _invalidate_cache, get
+        from memory_os.config.sysctl import _invalidate_cache, get
         _invalidate_cache()
         self.assertFalse(get("retriever.drr_enabled"))
         # 恢复
@@ -158,13 +158,13 @@ class TestDRRSysctl(unittest.TestCase):
 
     def test_tunable_registered(self):
         """DRR tunable 已注册到 config.py _REGISTRY。"""
-        from config import get
+        from memory_os.config.sysctl import get
         self.assertIsInstance(get("retriever.drr_enabled"), bool)
         self.assertIsInstance(get("retriever.drr_max_same_type"), int)
 
     def test_tunable_defaults(self):
         """DRR tunable 默认值正确。"""
-        from config import _REGISTRY
+        from memory_os.config.sysctl import _REGISTRY
         enabled_entry = _REGISTRY["retriever.drr_enabled"]
         self.assertTrue(enabled_entry[0])  # default True
         max_same_entry = _REGISTRY["retriever.drr_max_same_type"]

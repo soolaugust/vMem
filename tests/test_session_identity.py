@@ -7,7 +7,7 @@ OS 类比：/proc/self/status → PID Identity
   进程通过 /proc/self 获取自己的 PID，而不是猜测环境变量。
   类似地，hook 应从 stdin（hook 协议的"进程描述符"）获取 session_id。
 """
-import tmpfs  # noqa: F401 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 测试隔离
 import unittest
 import json
 import os
@@ -26,8 +26,8 @@ class TestRetrieverSessionIdentity(unittest.TestCase):
 
     def test_session_id_from_hook_input(self):
         """hook_input 有 session_id 时应使用它"""
-        from store import open_db, ensure_schema, insert_chunk
-        from schema import MemoryChunk
+        from memory_os.store.api import open_db, ensure_schema, insert_chunk
+        from memory_os.core.schema import MemoryChunk
         import retriever
 
         conn = open_db()
@@ -140,7 +140,7 @@ class TestSwapOutBackwardCompat(unittest.TestCase):
 
     def test_query_includes_unknown(self):
         """真实 session_id 查询时应同时包含 'unknown'"""
-        from store import open_db, ensure_schema
+        from memory_os.store.api import open_db, ensure_schema
 
         conn = open_db()
         ensure_schema(conn)
@@ -238,7 +238,7 @@ class TestSessionIdPersistence(unittest.TestCase):
 
     def test_trace_with_real_session(self):
         """recall_traces 应包含真实 session_id"""
-        from store import open_db, ensure_schema
+        from memory_os.store.api import open_db, ensure_schema
 
         conn = open_db()
         ensure_schema(conn)
@@ -262,8 +262,8 @@ class TestSessionIdPersistence(unittest.TestCase):
 
     def test_chunk_with_real_session(self):
         """memory_chunks source_session 应包含真实 session_id"""
-        from store import open_db, ensure_schema, insert_chunk
-        from schema import MemoryChunk
+        from memory_os.store.api import open_db, ensure_schema, insert_chunk
+        from memory_os.core.schema import MemoryChunk
 
         conn = open_db()
         ensure_schema(conn)

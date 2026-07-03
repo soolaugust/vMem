@@ -20,7 +20,7 @@ sys.path.insert(0, str(_ROOT / "hooks"))
 
 def _make_conn():
     """创建内存数据库"""
-    from store import open_db, ensure_schema
+    from memory_os.store.api import open_db, ensure_schema
     import os
     os.environ.setdefault("MEMORY_OS_DIR", "/tmp/memory_os_test_pi")
     os.makedirs("/tmp/memory_os_test_pi", exist_ok=True)
@@ -57,7 +57,7 @@ def test_pi1_importance_boosted_when_similar_exists():
     _insert_chunk(conn, "old-001", "端口配置决策：后端用3000", "decision", 0.80)
 
     # 模拟 find_similar 逻辑：新 chunk 与旧 chunk 相似度高
-    from store_vfs import find_similar
+    from memory_os.store.vfs_compat import find_similar
     new_summary = "端口配置决策：后端服务使用3000端口"
 
     _old_id = find_similar(conn, new_summary, "decision", project="test")
@@ -81,7 +81,7 @@ def test_pi2_no_boost_when_no_similar():
     # 插入与新 chunk 完全不相关的旧 chunk
     _insert_chunk(conn, "old-001", "TCP 拥塞控制算法分析", "decision", 0.80)
 
-    from store_vfs import find_similar
+    from memory_os.store.vfs_compat import find_similar
     new_summary = "端口配置决策：前端用8080"
     _old_id = find_similar(conn, new_summary, "decision", project="test")
 

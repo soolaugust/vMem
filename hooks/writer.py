@@ -16,10 +16,10 @@ from pathlib import Path
 # 将 memory-os 根目录加入 path
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
-from schema import MemoryChunk
-from utils import resolve_project_id
-from store import open_db, ensure_schema, insert_chunk, get_project_chunk_count, evict_lowest_retention, kswapd_scan, dmesg_log, DMESG_INFO, DMESG_DEBUG, DMESG_WARN, already_exists, merge_similar
-from config import get as _sysctl  # 迭代27: sysctl Runtime Tunables
+from memory_os.core.schema import MemoryChunk
+from memory_os.core.utils import resolve_project_id
+from memory_os.store.api import open_db, ensure_schema, insert_chunk, get_project_chunk_count, evict_lowest_retention, kswapd_scan, dmesg_log, DMESG_INFO, DMESG_DEBUG, DMESG_WARN, already_exists, merge_similar
+from memory_os.config.sysctl import get as _sysctl  # 迭代27: sysctl Runtime Tunables
 
 MEMORY_OS_DIR = Path.home() / ".claude" / "memory-os"
 LATEST_JSON = MEMORY_OS_DIR / "latest.json"
@@ -411,7 +411,7 @@ def _write_sqlite(chunk: MemoryChunk) -> None:
         #       不会比 decision/reasoning_chain 更优先淘汰——设计意图未落地。
         # 修复：insert_chunk 后立即按 chunk_type 设置 oom_adj（UPDATE 仅改单列，代价极低）
         try:
-            from config import get as _cfg
+            from memory_os.config.sysctl import get as _cfg
             auto_oom = None
             if chunk.chunk_type == "prompt_context":
                 auto_oom = _cfg("oom.auto_disposable_ctx")  # 默认 500：优先淘汰
@@ -440,7 +440,7 @@ def _sync_scheduler_tasks(current_tasks, next_tasks, project, session_id):
     幂等设计：按 (project, task_name, status) 去重。
     """
     try:
-        from store_core import (open_db, ensure_schema, sched_create_task,
+        from memory_os.store.core import (open_db, ensure_schema, sched_create_task,
                                 sched_update_task, sched_get_tasks)
         conn = open_db()
         ensure_schema(conn)
@@ -774,7 +774,7 @@ def _capture_verification_feedback(prompt: str, project: str, session_id: str) -
             new_status = status_map.get(feedback_type)
 
             for cid in chunk_ids[:10]:  # 最多影响 10 个 chunks
-                from store_vfs import update_confidence
+                from memory_os.store.vfs_compat import update_confidence
                 update_confidence(conn, cid, delta, f"feedback_{feedback_type}",
                                   verification_status=new_status)
         except (json.JSONDecodeError, TypeError, KeyError):

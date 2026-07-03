@@ -31,7 +31,7 @@ def tmp_db(tmp_path):
 def test_schema_has_raw_snippet_column(tmp_db):
     # 需要在 env 设置后 import，避免模块级路径固化
     import importlib
-    import store_vfs
+    import memory_os.store.vfs_compat as store_vfs
     importlib.reload(store_vfs)
 
     conn = store_vfs.open_db(tmp_db)
@@ -46,9 +46,9 @@ def test_schema_has_raw_snippet_column(tmp_db):
 # ── 测试 2：insert_chunk 写入并读回 raw_snippet ───────────────────────────────
 def test_insert_and_read_raw_snippet(tmp_db):
     import importlib
-    import store_vfs
+    import memory_os.store.vfs_compat as store_vfs
     importlib.reload(store_vfs)
-    from schema import MemoryChunk
+    from memory_os.core.schema import MemoryChunk
 
     conn = store_vfs.open_db(tmp_db)
     store_vfs.ensure_schema(conn)
@@ -79,7 +79,7 @@ def test_insert_and_read_raw_snippet(tmp_db):
 # ── 测试 3：_write_chunk 传入 raw_snippet 后 DB 正确存储 ──────────────────────
 def test_write_chunk_stores_raw_snippet(tmp_db, monkeypatch):
     import importlib
-    import store_vfs
+    import memory_os.store.vfs_compat as store_vfs
     importlib.reload(store_vfs)
 
     # 将 hooks 目录加入 sys.path
@@ -117,9 +117,9 @@ def test_write_chunk_stores_raw_snippet(tmp_db, monkeypatch):
 # ── 测试 4：raw_snippet 超过 500 字时自动截断 ─────────────────────────────────
 def test_raw_snippet_truncated_at_500(tmp_db):
     import importlib
-    import store_vfs
+    import memory_os.store.vfs_compat as store_vfs
     importlib.reload(store_vfs)
-    from schema import MemoryChunk
+    from memory_os.core.schema import MemoryChunk
 
     conn = store_vfs.open_db(tmp_db)
     store_vfs.ensure_schema(conn)
@@ -151,9 +151,9 @@ def test_raw_snippet_truncated_at_500(tmp_db):
 def test_retriever_inject_raw_snippet_high_importance(tmp_db):
     """importance=0.80 + raw_snippet → 注入时附加「原文：」"""
     import importlib
-    import store_vfs
+    import memory_os.store.vfs_compat as store_vfs
     importlib.reload(store_vfs)
-    from schema import MemoryChunk
+    from memory_os.core.schema import MemoryChunk
 
     conn = store_vfs.open_db(tmp_db)
     store_vfs.ensure_schema(conn)
@@ -198,9 +198,9 @@ def test_retriever_inject_raw_snippet_high_importance(tmp_db):
 def test_retriever_no_raw_snippet_low_importance(tmp_db):
     """importance=0.50 → 不应附加原文（不在 high_imp_ids 中）"""
     import importlib
-    import store_vfs
+    import memory_os.store.vfs_compat as store_vfs
     importlib.reload(store_vfs)
-    from schema import MemoryChunk
+    from memory_os.core.schema import MemoryChunk
 
     conn = store_vfs.open_db(tmp_db)
     store_vfs.ensure_schema(conn)

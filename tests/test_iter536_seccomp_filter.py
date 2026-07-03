@@ -12,8 +12,8 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from store_vfs import _seccomp_filter, _vfs_write_protect, insert_chunk
-from store import open_db, ensure_schema
+from memory_os.store.vfs_compat import _seccomp_filter, _vfs_write_protect, insert_chunk
+from memory_os.store.api import open_db, ensure_schema
 
 
 def _make_chunk(summary: str, chunk_type: str = "causal_chain", importance: float = 0.80):
@@ -124,7 +124,7 @@ def test_sanitize_too_short_reject():
 
 def test_disabled_config():
     """配置禁用时直接 allow"""
-    import config
+    import memory_os.config.sysctl as config
     original = config._REGISTRY.get("vfs.seccomp_filter_enabled")
     config._REGISTRY["vfs.seccomp_filter_enabled"] = (False, bool, None, None, None, "test")
     try:

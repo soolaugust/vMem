@@ -6,7 +6,7 @@
   "required_gates": [
     "doctor_passes",
     "install_repair_idempotent",
-    "context_hard_overflow_no_block",
+    "context_hard_overflow_enters_working_set",
     "critical_pressure_sheds_retriever",
     "fault_no_db_degrades",
     "package_metadata_ok",

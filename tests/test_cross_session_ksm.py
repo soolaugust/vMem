@@ -17,8 +17,8 @@ from unittest.mock import patch, MagicMock
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
 
-from agent_working_set import WorkingSet, WorkingSetRegistry, WSEntry
-from schema import MemoryChunk
+from memory_os.runtime.workspace.agent_working_set_compat import WorkingSet, WorkingSetRegistry, WSEntry
+from memory_os.core.schema import MemoryChunk
 
 
 def _make_chunk(idx: int, project: str = "ksm-project",
@@ -214,18 +214,18 @@ class TestPromoteHotChunks:
 
 class TestKSMConfig:
     def test_config_keys_exist(self):
-        from config import get as sysctl
+        from memory_os.config.sysctl import get as sysctl
         assert isinstance(sysctl("ksm.enabled"), bool)
         assert isinstance(sysctl("ksm.min_access_count"), int)
         assert isinstance(sysctl("ksm.min_sessions"), int)
 
     def test_defaults(self):
-        from config import get as sysctl
+        from memory_os.config.sysctl import get as sysctl
         assert sysctl("ksm.enabled") is True
         assert sysctl("ksm.min_access_count") == 3
         assert sysctl("ksm.min_sessions") == 2
 
     def test_min_sessions_at_least_two(self):
         """min_sessions 必须 >= 2（1 个 session 不需要 KSM）。"""
-        from config import get as sysctl
+        from memory_os.config.sysctl import get as sysctl
         assert sysctl("ksm.min_sessions") >= 2

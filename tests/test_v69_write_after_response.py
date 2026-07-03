@@ -9,7 +9,7 @@
 4. 写入路径数据完整性不受影响
 5. 延迟基准：输出时间 vs commit+close 时间分离验证
 """
-import tmpfs  # noqa: F401 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 测试隔离
 
 import json
 import os
@@ -137,7 +137,7 @@ class TestWriteIntegrity(unittest.TestCase):
 
     def test_trace_written_after_output(self):
         """写入路径在输出后仍应正确写入数据"""
-        from store import open_db, ensure_schema, insert_trace, update_accessed
+        from memory_os.store.api import open_db, ensure_schema, insert_trace, update_accessed
 
         conn = open_db()
         ensure_schema(conn)
@@ -185,7 +185,7 @@ class TestWriteIntegrity(unittest.TestCase):
 
     def test_commit_close_latency_isolation(self):
         """验证 commit + close 延迟确实是瓶颈（基准测试）"""
-        from store import open_db, ensure_schema
+        from memory_os.store.api import open_db, ensure_schema
 
         conn = open_db()
         ensure_schema(conn)

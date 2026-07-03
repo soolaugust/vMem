@@ -17,7 +17,7 @@ os.environ["MEMORY_OS_DB"] = os.path.join(_tmpdir, "store.db")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import production_assertions as pa
+import memory_os.observability.production_assertions as pa
 
 # Override paths
 pa.MEMORY_OS_DIR = Path(_tmpdir)
@@ -114,6 +114,31 @@ def test_T1_empty_db_fix_mode():
     report = pa.run_all(fix=True)
     # fix 模式下空库应该被修复或忽略
     assert report["status"] in ("HEALTHY", "DEGRADED"), f"Empty DB with fix got {report['status']}"
+    conn.close()
+
+
+def test_T1b_missing_apply_count_non_empty_requires_migration():
+    """非空旧 schema 缺 apply_count 不能被当成空库兼容跳过。"""
+    conn = _setup_db()
+    _insert_chunk(conn, "c1")
+    _insert_trace(conn, injected=1, chunk_ids=["c1"])
+
+    r = pa.assert_apply_signal_alive(conn)
+    assert not r.passed
+    assert r.severity == "critical"
+    assert "schema migration required" in r.message
+    conn.close()
+
+
+def test_T1c_missing_source_type_non_empty_requires_migration():
+    """非空旧 schema 缺 source_type 不能被当成空库兼容跳过。"""
+    conn = _setup_db()
+    _insert_chunk(conn, "c1")
+
+    r = pa.assert_memory_md_synced(conn)
+    assert not r.passed
+    assert r.severity == "critical"
+    assert "schema migration" in r.message
     conn.close()
 
 
@@ -256,7 +281,8 @@ def test_T11_run_all_returns_report():
     assert "summary" in report
     assert "status" in report
     assert "results" in report
-    assert report["summary"]["total"] == 14
+    expected_total = len(pa.ALL_ASSERTIONS)
+    assert report["summary"]["total"] == expected_total
     assert report["summary"]["passed"] + report["summary"]["failed"] == report["summary"]["total"]
 
 

@@ -8,8 +8,8 @@ test_context_aware.py — 迭代315：情境感知注入单元测试
   4. 空/None 输入安全返回0
 """
 import pytest
-from store_vfs import extract_encoding_context
-from scorer import context_match_score, retrieval_score
+from memory_os.store.vfs_compat import extract_encoding_context
+from memory_os.core.scorer import context_match_score, retrieval_score
 
 
 # ── extract_encoding_context 测试 ────────────────────────────────

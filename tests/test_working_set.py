@@ -18,8 +18,8 @@ from unittest.mock import patch, MagicMock
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
 
-from agent_working_set import WorkingSet, WorkingSetRegistry, WSEntry
-from schema import MemoryChunk
+from memory_os.runtime.workspace.agent_working_set_compat import WorkingSet, WorkingSetRegistry, WSEntry
+from memory_os.core.schema import MemoryChunk
 
 
 def make_chunk(idx: int, chunk_type: str = "decision",

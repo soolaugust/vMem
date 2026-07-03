@@ -15,9 +15,9 @@ from datetime import datetime, timezone, timedelta
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store import open_db, ensure_schema
+from memory_os.store.api import open_db, ensure_schema
 
 
 def _insert_chunk(conn, cid, project, summary, importance=0.6, stability=1.0,
@@ -44,7 +44,7 @@ def test_coord1_ebbinghaus_decayed_skips_cold_importance():
     conn = open_db()
     ensure_schema(conn)
 
-    from store_mm import apply_ebbinghaus_decay
+    from memory_os.store.mm import apply_ebbinghaus_decay
 
     proj = f"coord1_{uuid.uuid4().hex[:6]}"
     cid = f"c1_{uuid.uuid4().hex[:10]}"
@@ -71,7 +71,7 @@ def test_coord1_ebbinghaus_decayed_skips_cold_importance():
 
     # Step 2: 模拟 DAMON COLD 逻辑（使用 decayed_ids 排除）
     # 直接复现 damon_scan 中的 COLD 处理逻辑
-    from config import get as _cfg
+    from memory_os.config.sysctl import get as _cfg
     cold_oom_delta = _cfg("damon.cold_oom_adj_delta")
     _ebbinghaus_decayed_ids = eb_result.get("decayed_ids", set())
 
@@ -124,7 +124,7 @@ def test_coord2_not_ebbinghaus_decayed_applies_cold():
     conn = open_db()
     ensure_schema(conn)
 
-    from store_mm import apply_ebbinghaus_decay
+    from memory_os.store.mm import apply_ebbinghaus_decay
 
     proj = f"coord2_{uuid.uuid4().hex[:6]}"
     cid = f"c2_{uuid.uuid4().hex[:10]}"
@@ -143,7 +143,7 @@ def test_coord2_not_ebbinghaus_decayed_applies_cold():
     )
 
     # Step 2: 模拟 DAMON COLD（没有被 Ebbinghaus 排除 → 正常惩罚）
-    from config import get as _cfg
+    from memory_os.config.sysctl import get as _cfg
     cold_oom_delta = _cfg("damon.cold_oom_adj_delta")
     _ebbinghaus_decayed_ids = eb_result.get("decayed_ids", set())
 

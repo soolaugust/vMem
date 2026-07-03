@@ -1412,18 +1412,18 @@ def _load_all_modules():
     import hashlib
     from datetime import datetime, timezone, date as _date_cls
 
-    from config import get as sysctl
-    from config import sched_ext_match
-    from utils import resolve_project_id
-    from scorer import retrieval_score, recency_score
-    from store import (open_db, ensure_schema, get_chunks, update_accessed,
+    from memory_os.config.sysctl import get as sysctl
+    from memory_os.config.sysctl import sched_ext_match
+    from memory_os.core.utils import resolve_project_id
+    from memory_os.core.scorer import retrieval_score, recency_score
+    from memory_os.store.api import (open_db, ensure_schema, get_chunks, update_accessed,
                        insert_trace, fts_search, dmesg_log, madvise_read,
                        swap_fault, swap_in, psi_stats, mglru_promote,
                        readahead_pairs, context_pressure_governor,
                        chunk_recall_counts)
-    from store import DMESG_INFO, DMESG_WARN, DMESG_DEBUG
-    from bm25 import hybrid_tokenize, bm25_scores, normalize, bm25_scores_cached
-    from store_vfs import read_chunk_version
+    from memory_os.store.api import DMESG_INFO, DMESG_WARN, DMESG_DEBUG
+    from memory_os.core.bm25 import hybrid_tokenize, bm25_scores, normalize, bm25_scores_cached
+    from memory_os.store.vfs_compat import read_chunk_version
 
     _modules.update({
         're': re,
@@ -1473,7 +1473,7 @@ def _load_all_modules():
                 "reference": "[索引]", "knowledge": "[知识]",
             }
             def _new_vfs_search(query, sources=None, top_k=3, timeout_ms=100):
-                from vfs import get_vfs as _lazy_get_vfs
+                from memory_os.vfs.api import get_vfs as _lazy_get_vfs
                 import zlib as _zlib
                 _vfs = _lazy_get_vfs()
                 # iter167: 从后端 corpus cache 读取 mtime key（无 I/O，~0.01ms）
@@ -1519,7 +1519,7 @@ def _load_all_modules():
 
     if not _vfs_loaded:
         try:
-            from knowledge_vfs_init import search as _kvfs_search, format_for_context as _kvfs_format, init_knowledge_vfs as _kvfs_init
+            from memory_os.vfs.knowledge_init_compat import search as _kvfs_search, format_for_context as _kvfs_format, init_knowledge_vfs as _kvfs_init
             _kvfs_init()
             _modules['kr_route'] = _kvfs_search
             _modules['kr_format'] = _kvfs_format
@@ -1564,7 +1564,7 @@ def _load_all_modules():
     # 对同一 query string 复用缓存的 match expr，消除 ~0.22ms 的 synonym expand + tokenize。
     # OS 类比：Linux dcache (dentry cache) — 路径名→inode 映射缓存，同一路径不重复解析。
     try:
-        import store_vfs as _store_vfs
+        import memory_os.store.vfs_compat as _store_vfs
         _orig_fts5_escape = _store_vfs._fts5_escape
         def _cached_fts5_escape(query_str: str) -> str:
             # iter175: cache hit → skip synonym expansion (~0.225ms)
@@ -1609,7 +1609,7 @@ def _load_all_modules():
     #   线程安全：dict 操作在 CPython GIL 下为原子，无需额外锁。
     # OS 类比：kswapd watermark — 容忍短暂 staleness 以换取 fast path throughput。
     try:
-        import config as _config_mod
+        import memory_os.config.sysctl as _config_mod
         _orig_sysctl_get = _config_mod.get
         _orig_invalidate = _config_mod._invalidate_cache
         _sysctl_cache: dict = {}  # key → (ts, value)
@@ -1647,7 +1647,7 @@ def _load_all_modules():
     #   失效：chunk_version 变化 → cache miss → re-query（同 _bm25_mem_cache 失效策略）
     #   hit: 0.4us；miss: ~0.617ms（同 baseline，写回缓存）。
     try:
-        import store_vfs as _store_vfs_mod
+        import memory_os.store.vfs_compat as _store_vfs_mod
         _orig_fts_search = _store_vfs_mod.fts_search
         _fts5_escape_fn = _store_vfs_mod._fts5_escape  # iter235: direct fn ref for raw SQL path
 
@@ -3195,7 +3195,7 @@ def _retriever_main_impl(hook_input: dict, mods: dict,
                 _local_bw_window = _effective_bw_window
                 # iter603+606: memcg_stat — cross-project recall 计数 + bw_window parity
                 try:
-                    from store_criu import chunk_recall_counts_memcg
+                    from memory_os.store.criu import chunk_recall_counts_memcg
                     if sysctl("memcg_stat.enabled") is not False:
                         _memcg_w = sysctl("memcg_stat.window") or 60
                         _memcg_c = chunk_recall_counts_memcg(_rc_conn, project, window=_memcg_w)
@@ -4655,7 +4655,7 @@ def _retriever_main_impl(hook_input: dict, mods: dict,
                 if not chunks:
                     return
                 search_texts = [f"{c['summary']} {c['content']}" for c in chunks]
-                from bm25 import BM25Index as _BM25Index
+                from memory_os.core.bm25 import BM25Index as _BM25Index
                 _bm25_idx = _BM25Index.load_or_build(search_texts, chunk_version=_cv)
                 _bm25_mem_cache_put(project, _rtypes_key, _cv, chunks, _bm25_idx, search_texts)
                 raw_scores = _bm25_idx.score(query)
@@ -7870,7 +7870,7 @@ def _prewarm_fts5():
         #    让首次真实请求（BM25 fallback path）命中 daemon 内存缓存
         if store_get_chunks and read_chunk_version and project:
             try:
-                from bm25 import BM25Index as _BM25Index
+                from memory_os.core.bm25 import BM25Index as _BM25Index
                 # iter207: use module-level constant (avoids local tuple rebuild)
                 _cv = read_chunk_version()
                 _rtypes_key = _ALL_RETRIEVE_TYPES_KEY  # iter207: pre-computed constant

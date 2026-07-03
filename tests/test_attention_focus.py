@@ -35,8 +35,8 @@ def tmpdb(tmp_path):
 
 @pytest.fixture()
 def conn(tmpdb):
-    from store_vfs import open_db
-    from store_focus import ensure_focus_schema
+    from memory_os.store.vfs_compat import open_db
+    from memory_os.store.focus import ensure_focus_schema
     c = open_db(tmpdb)
     ensure_focus_schema(c)
     yield c
@@ -46,7 +46,7 @@ def conn(tmpdb):
 # ── F1: update_focus 提取关键词 ───────────────────────────────────────────────
 
 def test_f1_update_focus_extracts_keywords(conn):
-    from store_focus import update_focus, get_focus
+    from memory_os.store.focus import update_focus, get_focus
     update_focus(conn, "sess1", "正在实现 `store_graph` 模块的 BM25 搜索功能")
     kws = get_focus(conn, "sess1")
     assert len(kws) > 0
@@ -57,7 +57,7 @@ def test_f1_update_focus_extracts_keywords(conn):
 # ── F2: get_focus 返回最近关键词 ─────────────────────────────────────────────
 
 def test_f2_get_focus_returns_keywords(conn):
-    from store_focus import update_focus, get_focus
+    from memory_os.store.focus import update_focus, get_focus
     update_focus(conn, "sess1", "DEBUG 模式下的 `retriever` 模块检索")
     kws = get_focus(conn, "sess1")
     assert isinstance(kws, list)
@@ -67,7 +67,7 @@ def test_f2_get_focus_returns_keywords(conn):
 # ── F3: LRU 淘汰 ─────────────────────────────────────────────────────────────
 
 def test_f3_lru_eviction(conn):
-    from store_focus import update_focus, get_focus, MAX_FOCUS_ITEMS
+    from memory_os.store.focus import update_focus, get_focus, MAX_FOCUS_ITEMS
     # 写入超过 MAX_FOCUS_ITEMS 个不同关键词
     for i in range(MAX_FOCUS_ITEMS + 5):
         update_focus(conn, "sess_lru", f"`unique_keyword_{i:03d}`")
@@ -78,7 +78,7 @@ def test_f3_lru_eviction(conn):
 # ── F4: 重复关键词 hit_count 递增 ────────────────────────────────────────────
 
 def test_f4_repeat_keyword_increments_hit_count(conn):
-    from store_focus import update_focus
+    from memory_os.store.focus import update_focus
     update_focus(conn, "sess2", "`bm25` 搜索算法")
     update_focus(conn, "sess2", "BM25 分数计算")
     row = conn.execute(
@@ -91,7 +91,7 @@ def test_f4_repeat_keyword_increments_hit_count(conn):
 # ── F5: focus_score_bonus — 命中时返回 bonus ─────────────────────────────────
 
 def test_f5_bonus_on_hit(conn):
-    from store_focus import focus_score_bonus, FOCUS_BONUS
+    from memory_os.store.focus import focus_score_bonus, FOCUS_BONUS
     bonus = focus_score_bonus(["bm25", "retriever"], "BM25 召回实现", "retriever 模块的搜索逻辑")
     assert bonus > 0
     assert bonus <= FOCUS_BONUS
@@ -100,14 +100,14 @@ def test_f5_bonus_on_hit(conn):
 # ── F6: focus_score_bonus — 无关键词时返回 0 ─────────────────────────────────
 
 def test_f6_bonus_zero_no_keywords(conn):
-    from store_focus import focus_score_bonus
+    from memory_os.store.focus import focus_score_bonus
     assert focus_score_bonus([], "BM25 召回实现", "") == 0.0
 
 
 # ── F7: 多词命中时 bonus 递增 ────────────────────────────────────────────────
 
 def test_f7_more_hits_more_bonus(conn):
-    from store_focus import focus_score_bonus
+    from memory_os.store.focus import focus_score_bonus
     # 1词命中
     b1 = focus_score_bonus(["bm25", "retriever", "scorer"], "BM25 召回", "")
     # 3词命中
@@ -119,7 +119,7 @@ def test_f7_more_hits_more_bonus(conn):
 # ── F8: clear_focus ───────────────────────────────────────────────────────────
 
 def test_f8_clear_focus(conn):
-    from store_focus import update_focus, clear_focus, get_focus
+    from memory_os.store.focus import update_focus, clear_focus, get_focus
     update_focus(conn, "sess3", "`store_graph` 模块")
     assert len(get_focus(conn, "sess3")) > 0
     clear_focus(conn, "sess3")
@@ -129,7 +129,7 @@ def test_f8_clear_focus(conn):
 # ── F9: unknown session → 无操作 ─────────────────────────────────────────────
 
 def test_f9_unknown_session_noop(conn):
-    from store_focus import update_focus, get_focus, clear_focus
+    from memory_os.store.focus import update_focus, get_focus, clear_focus
     result = update_focus(conn, "unknown", "一些文本")
     assert result == []
     kws = get_focus(conn, "unknown")
@@ -140,7 +140,7 @@ def test_f9_unknown_session_noop(conn):
 # ── F10: focus_stats ──────────────────────────────────────────────────────────
 
 def test_f10_focus_stats(conn):
-    from store_focus import update_focus, focus_stats
+    from memory_os.store.focus import update_focus, focus_stats
     update_focus(conn, "sess4", "`bm25` 和 `fts5` 搜索")
     stats = focus_stats(conn, "sess4")
     assert stats["session_id"] == "sess4"

@@ -1,0 +1,183 @@
+{
+  "timestamp": "2026-07-03T14:55:17.508958+00:00",
+  "suite": "smoke",
+  "verdict": {
+    "score": 100.0,
+    "level": "production-grade",
+    "category_scores": {
+      "install": 25.0,
+      "context_safety": 35.0,
+      "fault": 15.0,
+      "hygiene": 15.0,
+      "performance": 10
+    },
+    "gates_failed": []
+  },
+  "checks": [
+    {
+      "name": "package_metadata_ok",
+      "title": "Package metadata exposes vmem and legacy CLI",
+      "category": "install",
+      "ok": true,
+      "message": "pyproject package name and console scripts are correct",
+      "value": {
+        "name": "vmem",
+        "scripts": [
+          "memory-os",
+          "vmem"
+        ]
+      },
+      "threshold": null,
+      "duration_ms": 0.31,
+      "impact": "Users can invoke vMem from the installed wheel.",
+      "fix": "Set project.name=vmem and expose both vmem and memory-os console scripts.",
+      "gate": true
+    },
+    {
+      "name": "doctor_passes",
+      "title": "Doctor passes on a fresh writable memory dir",
+      "category": "install",
+      "ok": true,
+      "message": "vmem doctor reports all checks healthy",
+      "value": {
+        "ok": true,
+        "checks": [
+          {
+            "name": "required_files",
+            "ok": true,
+            "message": "required hook files present"
+          },
+          {
+            "name": "hooks",
+            "ok": true,
+            "message": "hook order ok: prompt_budget_guard before retriever"
+          },
+          {
+            "name": "retriever_pressure",
+            "ok": true,
+            "message": "retriever fallback and daemon consume pressure state"
+          },
+          {
+            "name": "memory_dir",
+            "ok": true,
+            "message": "memory dir writable: /tmp/claude-1000/claude-1000/tmpj5jixb9p/memory-os"
+          },
+          {
+            "name": "public_hygiene",
+            "ok": true,
+            "message": "no public internal-string hits"
+          }
+        ]
+      },
+      "threshold": "ok=true",
+      "duration_ms": 502.02,
+      "impact": "Users get a single command that proves the installation is sane.",
+      "fix": "Run vmem repair, verify packaged hook files, and ensure MEMORY_OS_DIR is writable.",
+      "gate": true
+    },
+    {
+      "name": "install_repair_idempotent",
+      "title": "Install/repair are idempotent",
+      "category": "install",
+      "ok": true,
+      "message": "install writes the guard once and repair is a no-op",
+      "value": {
+        "install": {
+          "ok": true,
+          "changed": true,
+          "settings_path": "/tmp/claude-1000/claude-1000/tmpj5jixb9p/settings.json",
+          "guard_index": 0,
+          "duplicates_removed": 0,
+          "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/prompt_budget_guard.py\"",
+          "action": "install"
+        },
+        "repair": {
+          "ok": true,
+          "changed": false,
+          "settings_path": "/tmp/claude-1000/claude-1000/tmpj5jixb9p/settings.json",
+          "guard_index": 0,
+          "duplicates_removed": 0,
+          "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/prompt_budget_guard.py\"",
+          "action": "repair"
+        },
+        "first_hook": {
+          "type": "command",
+          "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/prompt_budget_guard.py\"",
+          "timeout": 3,
+          "async": false
+        }
+      },
+      "threshold": "install changed=true, repair changed=false",
+      "duration_ms": 977.58,
+      "impact": "Users can safely re-run repair without duplicating hooks.",
+      "fix": "Normalize UserPromptSubmit hooks so prompt_budget_guard is first and unique.",
+      "gate": true
+    },
+    {
+      "name": "context_hard_overflow_enters_working_set",
+      "title": "Hard context overflow enters working-set mode",
+      "category": "context_safety",
+      "ok": true,
+      "message": "hard overflow triggers bounded working-set reclaim without blocking",
+      "value": {
+        "decision": "approve",
+        "pressure": "critical",
+        "mode": "working_set",
+        "working_set_exists": true,
+        "notice_chars": 239
+      },
+      "threshold": "decision=approve, pressure=critical, mode=working_set, notice<=1200",
+      "duration_ms": 54.14,
+      "impact": "vMem manages context pressure with OS-style working-set reclaim instead of stopping the user or sending an overlarge request blindly.",
+      "fix": "Make prompt_budget_guard write working_set state, shed optional context, and emit only bounded recovery context under hard pressure.",
+      "gate": true
+    },
+    {
+      "name": "critical_pressure_sheds_retriever",
+      "title": "Critical pressure sheds optional retrieval context",
+      "category": "context_safety",
+      "ok": true,
+      "message": "fallback emits no additionalContext and daemon is wired before Stage 0",
+      "value": {
+        "fallback_stdout_bytes": 0,
+        "daemon_wired_before_stage0": true
+      },
+      "threshold": "fallback_stdout_bytes=0, daemon_wired_before_stage0=true",
+      "duration_ms": 183.69,
+      "impact": "This is the local proof that vMem prevents extra context from pushing requests toward API 400.",
+      "fix": "Ensure retriever.py and retriever_daemon.py call should_shed_optional_context before retrieval/injection.",
+      "gate": true
+    },
+    {
+      "name": "fault_no_db_degrades",
+      "title": "No store.db degrades instead of crashing",
+      "category": "fault",
+      "ok": true,
+      "message": "production assertions return shaped DEGRADED report without store.db",
+      "value": {
+        "returncode": 1,
+        "status": "DEGRADED"
+      },
+      "threshold": "returncode=1, status=DEGRADED, report shape complete",
+      "duration_ms": 29.6,
+      "impact": "Fresh installs and broken stores produce actionable diagnostics rather than stack traces.",
+      "fix": "Return a normal report shape for no-db and keep text/json modes tolerant.",
+      "gate": true
+    },
+    {
+      "name": "public_hygiene_passes",
+      "title": "Public files contain no internal strings",
+      "category": "hygiene",
+      "ok": true,
+      "message": "public hygiene scan is clean",
+      "value": {
+        "hits": []
+      },
+      "threshold": "0 hits",
+      "duration_ms": 3.24,
+      "impact": "Public releases do not leak internal organization references.",
+      "fix": "Remove internal strings from public docs/configs or construct scanner patterns dynamically.",
+      "gate": true
+    }
+  ]
+}

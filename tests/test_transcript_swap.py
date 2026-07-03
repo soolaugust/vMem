@@ -10,7 +10,7 @@
 5. PostCompact 恢复包含对话摘要
 6. 端到端：swap out → swap in 对话摘要完整保留
 """
-import tmpfs  # 测试隔离（迭代54）
+import memory_os.runtime.tmpfs_compat as tmpfs  # 测试隔离（迭代54）
 
 import json
 import os

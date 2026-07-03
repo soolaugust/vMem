@@ -29,14 +29,14 @@ from datetime import datetime, timezone, timedelta
 _ROOT = Path(__file__).parent
 sys.path.insert(0, str(_ROOT))
 
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54)
-from store import (
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54)
+from memory_os.store.api import (
     open_db, ensure_schema, dmesg_log, DMESG_INFO,
     context_pressure_governor, GOV_LOW, GOV_NORMAL, GOV_HIGH, GOV_CRITICAL,
     _governor_load_state, _governor_save_state, _GOVERNOR_STATE_FILE,
     MEMORY_OS_DIR,
 )
-from config import get as _cfg
+from memory_os.config.sysctl import get as _cfg
 
 
 def _setup():

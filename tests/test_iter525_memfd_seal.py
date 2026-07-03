@@ -14,7 +14,7 @@ from pathlib import Path
 
 # tmpfs 测试隔离
 sys.path.insert(0, str(Path(__file__).parent.parent))
-import tmpfs  # noqa: F401 — 必须在 store import 之前
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 必须在 store import 之前
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "hooks"))
 

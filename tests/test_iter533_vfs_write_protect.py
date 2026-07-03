@@ -15,13 +15,13 @@ OS 类比：Linux LSM security_inode_create() (Chris Wright & James Morris, 2001
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: F401 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 测试隔离
 import time
 import sqlite3
 import pytest
 
-from store_vfs import _vfs_write_protect, insert_chunk
-from store import open_db, ensure_schema
+from memory_os.store.vfs_compat import _vfs_write_protect, insert_chunk
+from memory_os.store.api import open_db, ensure_schema
 
 
 class TestVfsWriteProtect:
@@ -73,7 +73,7 @@ class TestVfsWriteProtect:
         monkeypatch.setenv("MEMORY_OS_VFS_WRITE_PROTECT_ENABLED", "false")
         # 需要清除 config 缓存
         try:
-            import config
+            import memory_os.config.sysctl as config
             config._disk_config = None
         except Exception:
             pass

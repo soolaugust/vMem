@@ -24,7 +24,7 @@ from pathlib import Path
 
 # tmpfs 隔离
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import tmpfs
+import memory_os.runtime.tmpfs_compat as tmpfs
 
 # 现在导入 retriever
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hooks'))

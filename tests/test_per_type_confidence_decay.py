@@ -19,10 +19,10 @@ from datetime import datetime, timezone, timedelta
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store import open_db, ensure_schema
-from store_mm import apply_ebbinghaus_decay
+from memory_os.store.api import open_db, ensure_schema
+from memory_os.store.mm import apply_ebbinghaus_decay
 
 
 def _insert_chunk(conn, cid, project, chunk_type="decision", importance=0.6,

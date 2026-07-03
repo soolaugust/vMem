@@ -19,9 +19,9 @@ from unittest.mock import patch
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
 
-import tmpfs  # noqa: F401 — tmpfs isolation
-from store import open_db, ensure_schema, insert_chunk, pin_chunk, pin_decay, enforce_pin_cap, get_pinned_ids
-from schema import MemoryChunk
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation
+from memory_os.store.api import open_db, ensure_schema, insert_chunk, pin_chunk, pin_decay, enforce_pin_cap, get_pinned_ids
+from memory_os.core.schema import MemoryChunk
 
 _PROJECT = "test_pin_decay"
 
@@ -256,14 +256,14 @@ class TestEnforcePinCap:
 
 class TestPinDecapConfig:
     def test_config_keys_exist(self):
-        from config import get as sysctl
+        from memory_os.config.sysctl import get as sysctl
         assert isinstance(sysctl("pin.decay_enabled"), bool)
         assert isinstance(sysctl("pin.decay_days"), int)
         assert isinstance(sysctl("pin.cap_pct"), int)
         assert isinstance(sysctl("pin.cap_apply_on_pin"), bool)
 
     def test_defaults(self):
-        from config import get as sysctl
+        from memory_os.config.sysctl import get as sysctl
         assert sysctl("pin.decay_enabled") is True
         assert sysctl("pin.decay_days") == 30
         assert sysctl("pin.cap_pct") == 15

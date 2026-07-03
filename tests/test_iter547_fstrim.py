@@ -5,13 +5,13 @@ OS 类比：Linux fstrim / FITRIM ioctl (Lukas Czerner, 2010, kernel 2.6.37)
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: E402, F401 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402, F401 — 测试隔离
 import json
 import sqlite3
 import pytest
 from datetime import datetime, timezone, timedelta
-from store_vfs import open_db, ensure_schema
-from store_mm import fstrim
+from memory_os.store.vfs_compat import open_db, ensure_schema
+from memory_os.store.mm import fstrim
 
 
 PROJECT = "test:fstrim"

@@ -20,7 +20,7 @@ sys.path.insert(0, str(_ROOT))
 
 def _make_conn(tmpdir: Path) -> sqlite3.Connection:
     """Helper: create a temp store.db and ensure schema."""
-    from store import open_db, ensure_schema
+    from memory_os.store.api import open_db, ensure_schema
     db_path = tmpdir / "store.db"
     import os
     orig = os.environ.get("MEMORY_OS_DIR", "")
@@ -66,7 +66,7 @@ def test_es1_below_threshold_stays_episodic():
         _insert_chunk(conn, "c_es1_1", project, "reasoning_chain", "episodic",
                       access_count=4, stability=2.0, oom_adj=0)
 
-        from store_vfs import episodic_decay_scan
+        from memory_os.store.vfs_compat import episodic_decay_scan
         # Pass semantic_hard_threshold=5 explicitly; semantic_threshold=100 to disable merge path
         result = episodic_decay_scan(conn, project, semantic_threshold=100,
                                      semantic_hard_threshold=5)
@@ -90,7 +90,7 @@ def test_es2_above_threshold_upgrades_inplace():
         _insert_chunk(conn, "c_es2_1", project, "reasoning_chain", "episodic",
                       access_count=5, stability=init_stability, oom_adj=init_oom)
 
-        from store_vfs import episodic_decay_scan
+        from memory_os.store.vfs_compat import episodic_decay_scan
         result = episodic_decay_scan(conn, project, semantic_hard_threshold=5)
 
         assert result["inplace_promoted"] == 1, \
@@ -119,7 +119,7 @@ def test_es2_multiple_consolidatable_types():
             _insert_chunk(conn, f"c_es2b_{i}", project, ctype, "episodic",
                           access_count=6, stability=1.0)
 
-        from store_vfs import episodic_decay_scan
+        from memory_os.store.vfs_compat import episodic_decay_scan
         result = episodic_decay_scan(conn, project, semantic_hard_threshold=5)
 
         assert result["inplace_promoted"] == 3, \
@@ -146,7 +146,7 @@ def test_es3_non_consolidatable_type_not_upgraded():
         _insert_chunk(conn, "c_es3_1", project, "entity_stub", "episodic",
                       access_count=10)
 
-        from store_vfs import episodic_decay_scan
+        from memory_os.store.vfs_compat import episodic_decay_scan
         # semantic_threshold=100 disables merge path; only test A0 (inplace) behavior
         result = episodic_decay_scan(conn, project, semantic_threshold=100,
                                      semantic_hard_threshold=5)
@@ -168,7 +168,7 @@ def test_es4_already_semantic_not_touched():
         _insert_chunk(conn, "c_es4_1", project, "reasoning_chain", "semantic",
                       access_count=10, stability=5.0, oom_adj=-100)
 
-        from store_vfs import episodic_decay_scan
+        from memory_os.store.vfs_compat import episodic_decay_scan
         result = episodic_decay_scan(conn, project, semantic_hard_threshold=5)
 
         assert result["inplace_promoted"] == 0, \
@@ -202,7 +202,7 @@ def test_es5_sleep_consolidate_returns_inplace_count():
         _insert_chunk(conn, "c_es5_3", project, "decision", "episodic",
                       access_count=3)
 
-        from store_vfs import sleep_consolidate
+        from memory_os.store.vfs_compat import sleep_consolidate
         result = sleep_consolidate(conn, project=project, session_id="test-es5")
 
         assert "episodic_inplace_promoted" in result, \
@@ -224,7 +224,7 @@ def test_es6_stability_capped_at_200():
         _insert_chunk(conn, "c_es6_1", project, "decision", "episodic",
                       access_count=8, stability=150.0)  # 150 × 1.5 = 225 > 200
 
-        from store_vfs import episodic_decay_scan
+        from memory_os.store.vfs_compat import episodic_decay_scan
         result = episodic_decay_scan(conn, project, semantic_hard_threshold=5)
 
         assert result["inplace_promoted"] == 1

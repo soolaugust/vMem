@@ -21,15 +21,15 @@ kernel/sched/fair.c, cfs_bandwidth.c)
 """
 import sys, os, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-import tmpfs  # noqa: E402 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402 — 测试隔离
 
-from scorer import (
+from memory_os.core.scorer import (
     cfs_bandwidth_throttle,
     saturation_penalty,
     bandwidth_throttle,
     retrieval_score,
 )
-from config import get as sysctl
+from memory_os.config.sysctl import get as sysctl
 
 _pass = _fail = 0
 

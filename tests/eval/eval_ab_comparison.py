@@ -32,8 +32,8 @@ STORE_DB = str(Path.home() / ".claude" / "memory-os" / "store.db")
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
 
-from bm25 import bm25_scores, normalize as bm25_normalize
-from scorer import retrieval_score
+from memory_os.core.bm25 import bm25_scores, normalize as bm25_normalize
+from memory_os.core.scorer import retrieval_score
 
 # ── API 配置 ─────────────────────────────────────────────────────────
 

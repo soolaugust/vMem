@@ -20,10 +20,10 @@ from datetime import datetime, timezone, timedelta
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store import open_db, ensure_schema
-from store_mm import autotune, _autotune_load_state, _autotune_save_state
+from memory_os.store.api import open_db, ensure_schema
+from memory_os.store.mm import autotune, _autotune_load_state, _autotune_save_state
 
 
 def _mock_traces(conn, project, hit_rate_pct: float, n: int = 15):
@@ -76,7 +76,7 @@ def _force_autotune_state(project: str, hit_rate_pct: float,
         circuit=circuit,
     )
     # 修正时间戳（save_state 会用 now，需要手动覆盖）
-    from store_mm import _AUTOTUNE_STATE_FILE
+    from memory_os.store.mm import _AUTOTUNE_STATE_FILE
     import json as _json
     data = _json.loads(_AUTOTUNE_STATE_FILE.read_text())
     data[project]["timestamp"] = ts

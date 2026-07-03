@@ -24,7 +24,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-import config
+import memory_os.config.sysctl as config
 
 _original_sysctl_file = config.SYSCTL_FILE
 _original_dir = config.MEMORY_OS_DIR

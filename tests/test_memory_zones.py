@@ -5,7 +5,7 @@ test_memory_zones.py — 迭代82: Memory Zones — chunk_type Retrieval Exclusi
 OS 类比：Linux ZONE_DMA/ZONE_NORMAL/ZONE_HIGHMEM — 不同区域的内存用途隔离
 验证 retriever.exclude_types sysctl 正确排除 prompt_context 等类型
 """
-import tmpfs  # noqa: F401 — must be first to isolate test DB
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — must be first to isolate test DB
 
 import os
 import sys
@@ -15,12 +15,12 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from store import open_db, ensure_schema, fts_search, get_chunks
+from memory_os.store.api import open_db, ensure_schema, fts_search, get_chunks
 
 
 def _insert_chunk(conn, project, chunk_type, summary, content, importance=0.8):
     import uuid as _uuid
-    from store_vfs import _cjk_tokenize
+    from memory_os.store.vfs_compat import _cjk_tokenize
     chunk_id = str(_uuid.uuid4())
     conn.execute("""
         INSERT INTO memory_chunks
@@ -48,7 +48,7 @@ class TestMemoryZonesSysctl(unittest.TestCase):
 
     def test_sysctl_registered(self):
         """exclude_types sysctl exists with expected default."""
-        import config
+        import memory_os.config.sysctl as config
         val = config.get("retriever.exclude_types")
         self.assertEqual(val, "prompt_context,conversation_summary",
                          f"Default should be 'prompt_context,conversation_summary', got {val!r}")

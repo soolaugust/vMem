@@ -127,7 +127,7 @@ if __name__ == "__main__":
 
     # ── T8：sysctl 控制 — cow_prescan_chars 限制扫描范围 ──
     print("\n--- T8: sysctl 控制 ---")
-    from config import get as _sysctl
+    from memory_os.config.sysctl import get as _sysctl
     prescan_chars = _sysctl("extractor.cow_prescan_chars")
     test("sysctl_cow_prescan_chars", prescan_chars == 3000,
          f"expected 3000, got {prescan_chars}")

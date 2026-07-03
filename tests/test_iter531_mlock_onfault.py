@@ -20,10 +20,10 @@ OS 类比：Linux mlock2(MLOCK_ONFAULT) (Eric B Munson, 2015, kernel 4.4)
 """
 import sys, os, time, sqlite3, uuid
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: E402 — 测试隔离
-from store_mm import mlock_onfault_promote
-from store_swap import OOM_ADJ_MIN, OOM_ADJ_PROTECTED, OOM_ADJ_ONFAULT, OOM_ADJ_DEFAULT
-from store import open_db, ensure_schema
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402 — 测试隔离
+from memory_os.store.mm import mlock_onfault_promote
+from memory_os.store.swap import OOM_ADJ_MIN, OOM_ADJ_PROTECTED, OOM_ADJ_ONFAULT, OOM_ADJ_DEFAULT
+from memory_os.store.api import open_db, ensure_schema
 
 PROJECT = "test_iter531_mlock_onfault"
 
@@ -141,7 +141,7 @@ def test_t7_bump_version():
     conn = open_db()
     ensure_schema(conn)
     # Read initial version
-    from store_vfs import read_chunk_version
+    from memory_os.store.vfs_compat import read_chunk_version
     v_before = read_chunk_version()
     cid = _make_chunk(conn, "T7 version bump", oom_adj=OOM_ADJ_ONFAULT)
     mlock_onfault_promote(conn, [cid])

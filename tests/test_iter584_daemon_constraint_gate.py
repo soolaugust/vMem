@@ -67,7 +67,7 @@ def _make_chunk(id, summary, content, chunk_type, importance, project, oom_adj=0
 
 def setup_db():
     """Create test DB with chunks and recall_traces."""
-    from store import open_db, ensure_schema, insert_chunk
+    from memory_os.store.api import open_db, ensure_schema, insert_chunk
     conn = open_db()
     ensure_schema(conn)
 
@@ -134,7 +134,7 @@ def test_refault_distance_gate():
     """高召回率 constraint 被 refault_distance 拦截。"""
     print("\n[1] refault_distance thrash gate")
 
-    from config import get as sysctl
+    from memory_os.config.sysctl import get as sysctl
     import re
     _CONSTRAINT_RE = re.compile(r'[^\w\u4e00-\u9fff]')
 
@@ -227,7 +227,7 @@ def test_low_relevance_filtered():
     print("\n[3] Low relevance filter")
 
     import re
-    from config import get as sysctl
+    from memory_os.config.sysctl import get as sysctl
     _CONSTRAINT_RE = re.compile(r'[^\w\u4e00-\u9fff]')
 
     _constraint_min_rel = sysctl("retriever.constraint_min_relevance")
@@ -250,7 +250,7 @@ def test_combined_filter_flow():
     print("\n[4] Combined filter flow simulation")
 
     import re
-    from config import get as sysctl
+    from memory_os.config.sysctl import get as sysctl
     _CONSTRAINT_RE = re.compile(r'[^\w\u4e00-\u9fff]')
 
     # Query that matches multiple constraints: monopoly(飞书), normal(API 超时), overlap(memory os)
@@ -325,7 +325,7 @@ def test_empty_recall_counts_no_crash():
     print("\n[5] Empty recall_counts resilience")
 
     import re
-    from config import get as sysctl
+    from memory_os.config.sysctl import get as sysctl
     _CONSTRAINT_RE = re.compile(r'[^\w\u4e00-\u9fff]')
 
     _recall_counts = {}

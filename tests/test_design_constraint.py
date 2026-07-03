@@ -12,7 +12,7 @@ OS 类比：Linux mlock(2) — 标记的内存不可淘汰，总是驻留在 RAM
 4. 约束注入 — 以 ⚠️ [约束] 前缀展示，约束优先于普通知识
 5. 约束去重 — 与其他类型分开去重，不冲突
 """
-import tmpfs  # noqa: F401 — must be first to isolate test DB
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — must be first to isolate test DB
 
 import os
 import sys
@@ -23,9 +23,9 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from store import open_db, ensure_schema, insert_chunk, delete_chunks, already_exists, fts_search, update_accessed
-from store import OOM_ADJ_PROTECTED
-from schema import MemoryChunk
+from memory_os.store.api import open_db, ensure_schema, insert_chunk, delete_chunks, already_exists, fts_search, update_accessed
+from memory_os.store.api import OOM_ADJ_PROTECTED
+from memory_os.core.schema import MemoryChunk
 
 
 def _make_constraint_chunk(project, summary, importance=0.95, oom_adj=OOM_ADJ_PROTECTED):
@@ -252,7 +252,7 @@ class TestConstraintRetrieval(unittest.TestCase):
 
     def test_constraint_in_retrieve_types(self):
         """design_constraint 在检索类型列表中。"""
-        from config import get as _sysctl
+        from memory_os.config.sysctl import get as _sysctl
         exclude_str = _sysctl("retriever.exclude_types")
         exclude_set = set(t.strip() for t in exclude_str.split(",") if t.strip()) if exclude_str else set()
         # 默认只排除 prompt_context，design_constraint 应该被检索
@@ -272,7 +272,7 @@ class TestConstraintRetrieval(unittest.TestCase):
 
     def test_constraint_chunks_detected(self):
         """在检索后的 top_k 中正确识别约束。"""
-        from store import get_chunks
+        from memory_os.store.api import get_chunks
         chunks = get_chunks(self.conn, "test-proj")
         constraint_chunks = [c for c in chunks if c.get("chunk_type") == "design_constraint"]
         self.assertTrue(len(constraint_chunks) > 0,

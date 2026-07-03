@@ -15,10 +15,10 @@ from datetime import datetime, timezone, timedelta
 
 # ── tmpfs 测试隔离 ──
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: F401
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401
 
-from store_mm import shrink_dcache_sb
-from store_vfs import open_db, ensure_schema
+from memory_os.store.mm import shrink_dcache_sb
+from memory_os.store.vfs_compat import open_db, ensure_schema
 
 
 def _make_chunk(conn, summary, chunk_type="decision", importance=0.80,

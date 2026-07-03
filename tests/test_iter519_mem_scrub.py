@@ -1,9 +1,9 @@
 """iter519: mem_scrub — ECC Memory Patrol Scrub 测试。"""
 import sys, os, uuid
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-import tmpfs  # noqa: F401 — 测试隔离
-from store import open_db, ensure_schema
-from store_mm import mem_scrub
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 测试隔离
+from memory_os.store.api import open_db, ensure_schema
+from memory_os.store.mm import mem_scrub
 from datetime import datetime, timezone
 import pytest
 
@@ -216,7 +216,7 @@ def test_max_per_scan_limit():
         _insert(conn, f"[merged→a{i}] [merged→b{i}] content {i}")
 
     # Patch config to limit to 2
-    import config
+    import memory_os.config.sysctl as config
     orig = config._REGISTRY.get("scrub.max_per_scan")
     config._REGISTRY["scrub.max_per_scan"] = (2, int, 1, 200, None, "test")
     config._disk_config = None  # force reload

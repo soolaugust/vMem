@@ -4,15 +4,15 @@ test_iter518_migrate_pages.py — Cross-NUMA Page Migration: project_id 知识�
 
 OS 类比：Linux migrate_pages() (Christoph Lameter, 2006)
 """
-import tmpfs  # noqa: F401 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 测试隔离
 import os, sys, pytest, json, uuid, time
 from datetime import datetime, timezone, timedelta
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from store_vfs import open_db, ensure_schema, bump_chunk_version
-from store_mm import migrate_pages, _find_aliases
+from memory_os.store.vfs_compat import open_db, ensure_schema, bump_chunk_version
+from memory_os.store.mm import migrate_pages, _find_aliases
 
 @pytest.fixture(autouse=True)
 def fresh_db(tmp_path):
@@ -20,7 +20,7 @@ def fresh_db(tmp_path):
     global _conn
     db_path = str(tmp_path / "test.db")
     # 覆盖 STORE_DB 让 open_db 用临时文件
-    import store_vfs
+    import memory_os.store.vfs_compat as store_vfs
     orig_db = store_vfs.STORE_DB
     store_vfs.STORE_DB = db_path
     _conn = open_db()
@@ -357,7 +357,7 @@ def test_fts5_consistency():
 
 def test_version_bump_on_migrate():
     """迁移后 chunk_version 应该递增（TLB 失效）。"""
-    from store_vfs import CHUNK_VERSION_FILE
+    from memory_os.store.vfs_compat import CHUNK_VERSION_FILE
 
     old_project = "abspath:ver_old"
     new_project = "git:ver_new"

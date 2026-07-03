@@ -9,7 +9,7 @@ from pathlib import Path
 
 # tmpfs 隔离
 sys.path.insert(0, str(Path(__file__).parent.parent))
-import tmpfs  # noqa: F401 — 设置测试隔离环境
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 设置测试隔离环境
 
 from hooks.extractor import _is_quality_chunk
 

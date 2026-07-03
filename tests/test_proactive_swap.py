@@ -159,7 +159,7 @@ class TestProactiveSwapLogic:
 class TestProactiveSwapConfig:
     def test_config_keys_exist(self):
         """config.py 中包含 proactive_swap 配置项。"""
-        from config import get as sysctl
+        from memory_os.config.sysctl import get as sysctl
         # 这些 key 应该存在（不应抛出 KeyError）
         val_enabled = sysctl("retriever.proactive_swap_enabled")
         val_threshold = sysctl("retriever.proactive_swap_imp_threshold")
@@ -171,20 +171,20 @@ class TestProactiveSwapConfig:
 
     def test_default_values_sensible(self):
         """默认值合理：threshold=0.80，max_restore=3，enabled=True。"""
-        from config import get as sysctl
+        from memory_os.config.sysctl import get as sysctl
         assert sysctl("retriever.proactive_swap_enabled") is True
         assert sysctl("retriever.proactive_swap_imp_threshold") == 0.80
         assert sysctl("retriever.proactive_swap_max_restore") == 3
 
     def test_threshold_in_valid_range(self):
         """threshold 应在 [0.5, 1.0] 范围内。"""
-        from config import get as sysctl
+        from memory_os.config.sysctl import get as sysctl
         threshold = sysctl("retriever.proactive_swap_imp_threshold")
         assert 0.5 <= threshold <= 1.0
 
     def test_max_restore_positive(self):
         """max_restore 应为正整数。"""
-        from config import get as sysctl
+        from memory_os.config.sysctl import get as sysctl
         max_restore = sysctl("retriever.proactive_swap_max_restore")
         assert max_restore >= 1
 
@@ -210,7 +210,7 @@ class TestSwapFaultBehavior:
             ("id-low",  0.40, "decision", compressed),
         ]
 
-        from store_swap import swap_fault
+        from memory_os.store.swap import swap_fault
         matches = swap_fault(mock_conn, "架构决策", "test-project")
 
         # swap_fault 应返回匹配结果（含 importance 字段）
@@ -223,7 +223,7 @@ class TestSwapFaultBehavior:
         mock_conn = MagicMock()
         mock_conn.execute.return_value.fetchall.return_value = []
 
-        from store_swap import swap_fault
+        from memory_os.store.swap import swap_fault
         matches = swap_fault(mock_conn, "", "test-project")
         assert matches == []
 
@@ -232,7 +232,7 @@ class TestSwapFaultBehavior:
         mock_conn = MagicMock()
         mock_conn.execute.return_value.fetchall.return_value = []
 
-        from store_swap import swap_in
+        from memory_os.store.swap import swap_in
         result = swap_in(mock_conn, ["nonexistent-id"])
         assert "restored_count" in result
         assert result["restored_count"] == 0  # 不存在的 id → 0

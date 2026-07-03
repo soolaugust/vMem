@@ -22,11 +22,11 @@ import uuid
 from pathlib import Path
 from datetime import datetime, timezone
 
-import tmpfs  # noqa: F401 — 测试隔离（必须在 store import 之前）
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 测试隔离（必须在 store import 之前）
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent / "hooks"))
 
-from store_core import (
+from memory_os.store.core import (
     open_db, ensure_schema, insert_chunk,
 )
 

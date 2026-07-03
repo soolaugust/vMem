@@ -4,7 +4,7 @@
 #   在首次调用时启动，在 crash 后自动重启（类似 Restart=on-failure）。
 #
 # 调用方式：
-#   此脚本不被 Claude hook 直接调用。由 iterate.sh 在 session 启动时唤起。
+#   此脚本不被 Claude hook 直接调用。由 scripts/iterate.sh 在 session 启动时唤起。
 #   也可由 loader.py SessionStart 在检测到 pool 未运行时触发。
 #
 # 健康检查机制：
@@ -131,7 +131,7 @@ case "$CMD" in
         ;;
 
     ensure)
-        # 确保运行中，未运行则启动（供 iterate.sh 和 SessionStart 调用）
+        # 确保运行中，未运行则启动（供 scripts/iterate.sh 和 SessionStart 调用）
         if ! _pool_healthy; then
             _pool_stop  # 清理可能的僵尸 pid 文件
             _pool_start

@@ -18,10 +18,10 @@ ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT.parent / "hooks"))
 
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
-from store import open_db, ensure_schema, insert_chunk, fts_search, get_chunks
-from schema import MemoryChunk
-from utils import resolve_project_id
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+from memory_os.store.api import open_db, ensure_schema, insert_chunk, fts_search, get_chunks
+from memory_os.core.schema import MemoryChunk
+from memory_os.core.utils import resolve_project_id
 
 
 def _seed_test_data(conn, project):

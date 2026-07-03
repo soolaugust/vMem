@@ -32,8 +32,8 @@ from datetime import datetime, timezone, timedelta
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
-from store_vfs import ensure_schema, compute_ribot_floor, _get_chunk_age_importance
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
+from memory_os.store.vfs_compat import ensure_schema, compute_ribot_floor, _get_chunk_age_importance
 
 
 @pytest.fixture
@@ -126,7 +126,7 @@ def test_rl5_bonus_capped_at_max():
 def test_rl6_disabled_no_bonus():
     """RL6: scorer.ribot_enabled=False 时，不应有任何 bonus。"""
     import unittest.mock as mock
-    import config as _config
+    import memory_os.config.sysctl as _config
 
     original_get = _config.get
     def patched_get(key, project=None):
@@ -154,7 +154,7 @@ def test_rl7_bonus_at_one_year():
 def test_rl8_custom_scale_configurable():
     """RL8: 自定义 ribot_scale=0.40 时，bonus 应约为默认值的 2 倍。"""
     import unittest.mock as mock
-    import config as _config
+    import memory_os.config.sysctl as _config
 
     original_get = _config.get
     def patched_get(key, project=None):
@@ -184,7 +184,7 @@ def test_rl8_custom_scale_configurable():
 
 def test_rl9_ribot_floor_protects_from_rif(conn):
     """RL9: 老 chunk 在 RIF 衰减中，stability 不低于 0.1 + ribot_floor_bonus。"""
-    from store_vfs import apply_retrieval_induced_forgetting
+    from memory_os.store.vfs_compat import apply_retrieval_induced_forgetting
 
     # 插入被保护的"old" chunk（60天前创建，importance=0.80）
     _insert_chunk(conn, "old_chunk", importance=0.80, created_days_ago=60.0,
@@ -206,7 +206,7 @@ def test_rl9_ribot_floor_protects_from_rif(conn):
 
     # 运行 RIF，使用极强的 decay_factor（强制测试 floor）
     import unittest.mock as mock
-    import config as _config
+    import memory_os.config.sysctl as _config
 
     original_get = _config.get
     def patched_get(key, project=None):
@@ -236,7 +236,7 @@ def test_rl9_ribot_floor_protects_from_rif(conn):
 
 def test_rl10_ribot_floor_protects_from_df(conn):
     """RL10: 老 chunk 含 deprecated 信号，Directed Forgetting 不低于 Ribot floor。"""
-    from store_vfs import apply_directed_forgetting
+    from memory_os.store.vfs_compat import apply_directed_forgetting
 
     # 插入老的 deprecated chunk（120天前，importance=0.80）
     created_at = _ago_iso(120.0)

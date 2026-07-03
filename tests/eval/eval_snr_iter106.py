@@ -70,7 +70,7 @@ check("B_total: 过滤准确率 ≥ 90%", b_pass >= 9, f"{b_pass}/{len(decision_
 
 # ── C. lru_gen_boost 数值验证 ─────────────────────────────
 print("\n=== C. lru_gen_boost 数值 ===")
-from scorer import lru_gen_boost, retrieval_score
+from memory_os.core.scorer import lru_gen_boost, retrieval_score
 
 check("C1: gen=0 → +0.06", abs(lru_gen_boost(0) - 0.06) < 0.001, f"got={lru_gen_boost(0):.4f}")
 check("C2: gen=4 → +0.03", abs(lru_gen_boost(4) - 0.03) < 0.001, f"got={lru_gen_boost(4):.4f}")
@@ -84,7 +84,7 @@ check("C6: 差值精确等于 0.06", abs(s0 - s8 - 0.06) < 0.001, f"diff={s0-s8:
 
 # ── D. fts_search 返回 lru_gen 字段 ──────────────────────
 print("\n=== D. fts_search lru_gen 字段 ===")
-from store_vfs import fts_search
+from memory_os.store.vfs_compat import fts_search
 
 rows = fts_search(conn, "query expansion", "abspath:7e3095aef7a6", top_k=5)
 check("D1: fts_search 返回结果", len(rows) > 0, f"rows={len(rows)}")

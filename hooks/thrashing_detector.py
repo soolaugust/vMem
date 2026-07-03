@@ -50,6 +50,8 @@ HOT_MB = 5.0         # > 5MB → 强烈建议 Grep/LSP
 CRIT_MB = 10.0       # > 10MB → 强制建议 /clear
 WINDOW_CALLS = 20    # 滑动窗口大小（最近 N 次调用）
 WARN_COOLDOWN_SECS = 120  # warn 冷却期（防止每次都 warn）
+POST_COMPACT_GRACE_SECS = 10 * 60  # compact 后 10 分钟宽限，避免历史 transcript 误报
+POST_COMPACT_GRACE_BYTES = 5 * 1024 * 1024  # 宽限期内新增 <5MB 不重复提示 compact
 
 # 单个文件大小警戒线
 LARGE_FILE_WARN_KB = 50   # > 50KB 的文件被 Read 时追加警告
@@ -67,7 +69,15 @@ def _load_state() -> dict:
     except Exception:
         pass
     return {
+        "schema_version": 2,
+        "session_id": "",
+        "epoch_id": 0,
+        "last_compact_ts": 0,
+        "post_compact_grace_until_ts": 0,
+        "post_compact_grace_bytes": POST_COMPACT_GRACE_BYTES,
         "session_bytes": 0,
+        "epoch_bytes": 0,
+        "lifetime_session_bytes": 0,
         "last_warn_ts": 0,
         "compact_count": 0,
         "window_bytes_history": [],  # list of (ts, bytes) tuples
@@ -81,6 +91,71 @@ def _save_state(state: dict):
     except Exception:
         pass
 
+
+
+
+def reset_compact_epoch(session_id: str, now_ts: float | None = None) -> dict:
+    """Record a real compact boundary and reset incremental context pressure.
+
+    The transcript may still be huge after /compact because it is historical log,
+    but the live prompt context is represented by bytes added after this epoch.
+    """
+    now_ts = time.time() if now_ts is None else now_ts
+    state = _load_state()
+    previous_epoch_bytes = int(state.get("session_bytes", 0) or 0)
+    state.update({
+        "schema_version": 2,
+        "session_id": session_id or state.get("session_id", ""),
+        "epoch_id": int(state.get("epoch_id", 0) or 0) + 1,
+        "last_compact_ts": now_ts,
+        "post_compact_grace_until_ts": now_ts + POST_COMPACT_GRACE_SECS,
+        "post_compact_grace_bytes": POST_COMPACT_GRACE_BYTES,
+        "session_bytes": 0,
+        "epoch_bytes": 0,
+        "last_warn_ts": 0,
+        "window_bytes_history": [],
+        "last_epoch_bytes_before_compact": previous_epoch_bytes,
+    })
+    state["compact_count"] = int(state.get("compact_count", 0) or 0) + 1
+    _save_state(state)
+    return state
+
+
+def _ensure_session_epoch(state: dict, session_id: str) -> dict:
+    """Do not let one Claude session inherit another session's pressure."""
+    if session_id and state.get("session_id") not in ("", session_id):
+        compact_count = int(state.get("compact_count", 0) or 0)
+        state = {
+            "schema_version": 2,
+            "session_id": session_id,
+            "epoch_id": 0,
+            "last_compact_ts": 0,
+            "post_compact_grace_until_ts": 0,
+            "post_compact_grace_bytes": POST_COMPACT_GRACE_BYTES,
+            "session_bytes": 0,
+            "epoch_bytes": 0,
+            "lifetime_session_bytes": 0,
+            "last_warn_ts": 0,
+            "compact_count": compact_count,
+            "window_bytes_history": [],
+        }
+    elif session_id and not state.get("session_id"):
+        state["session_id"] = session_id
+    state.setdefault("schema_version", 2)
+    state.setdefault("epoch_id", 0)
+    state.setdefault("post_compact_grace_until_ts", 0)
+    state.setdefault("post_compact_grace_bytes", POST_COMPACT_GRACE_BYTES)
+    state.setdefault("epoch_bytes", state.get("session_bytes", 0))
+    state.setdefault("lifetime_session_bytes", 0)
+    return state
+
+
+def _in_post_compact_grace(state: dict, now_ts: float) -> bool:
+    if now_ts >= float(state.get("post_compact_grace_until_ts", 0) or 0):
+        return False
+    epoch_bytes = int(state.get("epoch_bytes", state.get("session_bytes", 0)) or 0)
+    grace_bytes = int(state.get("post_compact_grace_bytes", POST_COMPACT_GRACE_BYTES) or 0)
+    return epoch_bytes < grace_bytes
 
 def _open_db() -> sqlite3.Connection | None:
     try:
@@ -187,7 +262,7 @@ def _build_notice(level: str, window_mb: float, session_mb: float,
             f"[thrashing_detector:critical] 🚨 Thrashing 风险极高！"
             f"近 {WINDOW_CALLS} 次输出 {window_mb:.1f}MB，session 累计 {session_mb:.1f}MB。"
             f" 极可能触发 Autocompact 循环。"
-            f" 建议立即：1) 执行 /clear 重置 context；2) 将关键信息存入 memory；"
+            f" Claude Code hook 不能自动执行 compact；请手动运行 /compact keep only current goal, files changed, decisions, blockers, next steps。"
             f" 3) 只用 Grep/LSP/mcp__memory-os__memory_lookup 获取所需信息。"
         )
 
@@ -225,8 +300,12 @@ def main():
     state = _load_state()
     now_ts = time.time()
 
-    # 更新 session 累计（使用 effective_bytes）
+    state = _ensure_session_epoch(state, session_id)
+
+    # 更新 compact epoch 内累计（使用 effective_bytes）。历史 transcript 不再参与判断。
     state["session_bytes"] = state.get("session_bytes", 0) + effective_bytes
+    state["epoch_bytes"] = state.get("epoch_bytes", 0) + effective_bytes
+    state["lifetime_session_bytes"] = state.get("lifetime_session_bytes", 0) + effective_bytes
 
     # 更新滑动窗口历史
     history = state.get("window_bytes_history", [])
@@ -238,8 +317,11 @@ def main():
     # 计算滑动窗口总字节（最近 WINDOW_CALLS 条）— 先算出压力等级再决定是否开 DB
     window_bytes = sum(h[1] for h in history[-WINDOW_CALLS:])
     window_mb = window_bytes / 1024 / 1024
-    session_mb = state["session_bytes"] / 1024 / 1024
+    session_mb = state["epoch_bytes"] / 1024 / 1024
     file_size_kb = file_size / 1024
+
+    # compact 后宽限：只要新增 context 还很少，就不因为历史 transcript/cache 累计重复提示。
+    in_compact_grace = _in_post_compact_grace(state, now_ts)
 
     # 冷却检查
     since_last_warn = now_ts - state.get("last_warn_ts", 0)
@@ -260,7 +342,9 @@ def main():
             tool_key = f"{tool_name.lower()}:{tool_input.get('file_path', '') or tool_input.get('command', '')[:100]}"
             _record_call(conn, session_id, tool_name, tool_key, effective_bytes)
 
-    if window_mb >= CRIT_MB:
+    if in_compact_grace:
+        level = None
+    elif window_mb >= CRIT_MB:
         level = "critical"
     elif window_mb >= HOT_MB:
         level = "hot"

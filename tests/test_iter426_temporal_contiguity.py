@@ -31,9 +31,9 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
-from store_graph import EdgeType, add_edge, expand_with_neighbors, ensure_graph_schema
-from store_vfs import ensure_schema
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
+from memory_os.store.graph import EdgeType, add_edge, expand_with_neighbors, ensure_graph_schema
+from memory_os.store.vfs_compat import ensure_schema
 
 
 @pytest.fixture

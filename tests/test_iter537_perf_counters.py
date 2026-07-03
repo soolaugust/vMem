@@ -23,12 +23,12 @@ from datetime import datetime, timezone, timedelta
 
 # tmpfs 测试隔离
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import tmpfs  # noqa: F401 — 自动隔离 DB
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 自动隔离 DB
 
 import unittest
-from store import open_db, ensure_schema, insert_chunk, insert_trace
-from store_mm import perf_counters, autotune
-from config import get as _cfg, sysctl_set, _REGISTRY
+from memory_os.store.api import open_db, ensure_schema, insert_chunk, insert_trace
+from memory_os.store.mm import perf_counters, autotune
+from memory_os.config.sysctl import get as _cfg, sysctl_set, _REGISTRY
 
 
 def _unique_project():

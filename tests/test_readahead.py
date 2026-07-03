@@ -15,10 +15,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 os.environ.setdefault("CLAUDE_CWD", str(Path(__file__).parent))
 
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
-from store import open_db, ensure_schema, insert_chunk, insert_trace, readahead_pairs
-from schema import MemoryChunk
-from config import get as sysctl
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+from memory_os.store.api import open_db, ensure_schema, insert_chunk, insert_trace, readahead_pairs
+from memory_os.core.schema import MemoryChunk
+from memory_os.config.sysctl import get as sysctl
 
 
 def _make_chunk(conn, project, chunk_type="decision", summary="test", importance=0.8):

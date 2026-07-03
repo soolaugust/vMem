@@ -15,13 +15,13 @@ from datetime import datetime, timezone, timedelta
 # 添加项目路径
 sys.path.insert(0, str(Path(__file__).parent))
 
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
-from store import (
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+from memory_os.store.api import (
     open_db, ensure_schema, insert_chunk, watchdog_check,
     dmesg_log, DMESG_ERR, DMESG_INFO,
 )
-from schema import MemoryChunk
-from config import get as _sysctl
+from memory_os.core.schema import MemoryChunk
+from memory_os.config.sysctl import get as _sysctl
 
 _PASS = 0
 _FAIL = 0
@@ -98,7 +98,7 @@ def test_fts5_integrity():
         _assert(fts_check[0]["status"] == "ok", f"fts5 status={fts_check[0]['status']} should be ok")
 
         # 验证 FTS5 搜索仍然工作
-        from store import fts_search
+        from memory_os.store.api import fts_search
         results = fts_search(conn, "BM25 scoring", "test-proj", top_k=5)
         _assert(len(results) > 0, f"FTS5 search works: {len(results)} results")
     finally:

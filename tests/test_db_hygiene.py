@@ -12,10 +12,10 @@ from pathlib import Path
 # tmpfs 隔离（必须在 store import 前）
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
-import tmpfs
+import memory_os.runtime.tmpfs_compat as tmpfs
 
-from store import open_db, ensure_schema, insert_chunk, already_exists, merge_similar, dmesg_log, DMESG_DEBUG
-from schema import MemoryChunk
+from memory_os.store.api import open_db, ensure_schema, insert_chunk, already_exists, merge_similar, dmesg_log, DMESG_DEBUG
+from memory_os.core.schema import MemoryChunk
 
 # 导入 db_hygiene 工具
 sys.path.insert(0, str(_ROOT / "tools"))

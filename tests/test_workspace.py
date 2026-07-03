@@ -47,8 +47,8 @@ def tmpdb(tmp_path):
 
 @pytest.fixture()
 def conn(tmpdb):
-    from store_vfs import open_db
-    from store_workspace import ensure_workspace_schema
+    from memory_os.store.vfs_compat import open_db
+    from memory_os.store.workspace import ensure_workspace_schema
     c = open_db(tmpdb)
     ensure_workspace_schema(c)
     # 创建 memory_chunks 表（workspace_knowledge 需要 FK）
@@ -83,7 +83,7 @@ def _insert_chunk(conn, chunk_id, chunk_type="decision", summary="test summary",
 # ── W1: resolve_workspace ─────────────────────────────────────────────────────
 
 def test_w1_resolve_workspace_creates(conn):
-    from store_workspace import resolve_workspace, get_workspace_by_path
+    from memory_os.store.workspace import resolve_workspace, get_workspace_by_path
     ws_id = resolve_workspace(conn, "/projects/myapp")
     assert ws_id and len(ws_id) == 16
     ws = get_workspace_by_path(conn, "/projects/myapp")
@@ -93,7 +93,7 @@ def test_w1_resolve_workspace_creates(conn):
 
 
 def test_w1_resolve_workspace_increments_entry_count(conn):
-    from store_workspace import resolve_workspace, get_workspace_by_path
+    from memory_os.store.workspace import resolve_workspace, get_workspace_by_path
     resolve_workspace(conn, "/projects/myapp")
     resolve_workspace(conn, "/projects/myapp")
     resolve_workspace(conn, "/projects/myapp")
@@ -102,7 +102,7 @@ def test_w1_resolve_workspace_increments_entry_count(conn):
 
 
 def test_w1_different_paths_different_ids(conn):
-    from store_workspace import resolve_workspace
+    from memory_os.store.workspace import resolve_workspace
     id1 = resolve_workspace(conn, "/projects/app1")
     id2 = resolve_workspace(conn, "/projects/app2")
     assert id1 != id2
@@ -111,7 +111,7 @@ def test_w1_different_paths_different_ids(conn):
 # ── W2: activate_workspace ────────────────────────────────────────────────────
 
 def test_w2_activate_empty_workspace(conn):
-    from store_workspace import resolve_workspace, activate_workspace
+    from memory_os.store.workspace import resolve_workspace, activate_workspace
     ws_id = resolve_workspace(conn, "/projects/empty")
     result = activate_workspace(conn, ws_id)
     assert result["workspace_id"] == ws_id
@@ -120,7 +120,7 @@ def test_w2_activate_empty_workspace(conn):
 
 
 def test_w2_activate_nonexistent(conn):
-    from store_workspace import activate_workspace
+    from memory_os.store.workspace import activate_workspace
     result = activate_workspace(conn, "nonexistent000000")
     assert result["kb_chunks"] == []
     assert result["file_facts"] == []
@@ -129,7 +129,7 @@ def test_w2_activate_nonexistent(conn):
 # ── W3: link_chunk_to_workspace ───────────────────────────────────────────────
 
 def test_w3_link_and_query(conn):
-    from store_workspace import resolve_workspace, link_chunk_to_workspace, get_workspace_knowledge
+    from memory_os.store.workspace import resolve_workspace, link_chunk_to_workspace, get_workspace_knowledge
     _insert_chunk(conn, "c1", "decision", "port decision")
     ws_id = resolve_workspace(conn, "/projects/app")
     link_chunk_to_workspace(conn, ws_id, "c1", source="conversation")
@@ -139,7 +139,7 @@ def test_w3_link_and_query(conn):
 
 
 def test_w3_link_idempotent(conn):
-    from store_workspace import resolve_workspace, link_chunk_to_workspace, get_workspace_knowledge
+    from memory_os.store.workspace import resolve_workspace, link_chunk_to_workspace, get_workspace_knowledge
     _insert_chunk(conn, "c2")
     ws_id = resolve_workspace(conn, "/projects/app")
     link_chunk_to_workspace(conn, ws_id, "c2")
@@ -151,7 +151,7 @@ def test_w3_link_idempotent(conn):
 # ── W4: upsert_workspace_file ─────────────────────────────────────────────────
 
 def test_w4_upsert_new_file(conn, tmp_path):
-    from store_workspace import resolve_workspace, upsert_workspace_file, get_workspace_files
+    from memory_os.store.workspace import resolve_workspace, upsert_workspace_file, get_workspace_files
     f = tmp_path / "docker-compose.yml"
     f.write_text("version: '3'\n")
     ws_id = resolve_workspace(conn, str(tmp_path))
@@ -163,7 +163,7 @@ def test_w4_upsert_new_file(conn, tmp_path):
 
 
 def test_w4_same_hash_skip(conn, tmp_path):
-    from store_workspace import resolve_workspace, upsert_workspace_file
+    from memory_os.store.workspace import resolve_workspace, upsert_workspace_file
     f = tmp_path / "docker-compose.yml"
     f.write_text("version: '3'\n")
     ws_id = resolve_workspace(conn, str(tmp_path))
@@ -173,7 +173,7 @@ def test_w4_same_hash_skip(conn, tmp_path):
 
 
 def test_w4_content_change_triggers_update(conn, tmp_path):
-    from store_workspace import resolve_workspace, upsert_workspace_file
+    from memory_os.store.workspace import resolve_workspace, upsert_workspace_file
     f = tmp_path / ".env"
     f.write_text("PORT=3000\n")
     ws_id = resolve_workspace(conn, str(tmp_path))
@@ -186,8 +186,8 @@ def test_w4_content_change_triggers_update(conn, tmp_path):
 # ── W5: scan_and_store ────────────────────────────────────────────────────────
 
 def test_w5_scan_and_store_docker_compose(conn, tmp_path):
-    from store_workspace import resolve_workspace
-    from workspace_scanner import scan_and_store
+    from memory_os.store.workspace import resolve_workspace
+    from memory_os.runtime.workspace.scanner_compat import scan_and_store
     dc = tmp_path / "docker-compose.yml"
     dc.write_text("""version: '3'
 services:
@@ -206,8 +206,8 @@ services:
 
 
 def test_w5_scan_no_update_on_repeat(conn, tmp_path):
-    from store_workspace import resolve_workspace
-    from workspace_scanner import scan_and_store
+    from memory_os.store.workspace import resolve_workspace
+    from memory_os.runtime.workspace.scanner_compat import scan_and_store
     dc = tmp_path / "docker-compose.yml"
     dc.write_text("version: '3'\nservices:\n  api:\n    ports:\n      - '5000:5000'\n")
     ws_id = resolve_workspace(conn, str(tmp_path))
@@ -219,7 +219,7 @@ def test_w5_scan_no_update_on_repeat(conn, tmp_path):
 # ── W6: docker-compose 端口提取 ───────────────────────────────────────────────
 
 def test_w6_docker_compose_port_extraction():
-    from workspace_scanner import extract_file_facts
+    from memory_os.runtime.workspace.scanner_compat import extract_file_facts
     import tempfile, os
     content = """version: '3'
 services:
@@ -249,7 +249,7 @@ services:
 # ── W7: .env 端口提取 ─────────────────────────────────────────────────────────
 
 def test_w7_env_file_port_extraction(tmp_path):
-    from workspace_scanner import extract_file_facts
+    from memory_os.runtime.workspace.scanner_compat import extract_file_facts
     env_file = tmp_path / ".env"
     env_file.write_text("PORT=3000\nDATABASE_URL=postgres://localhost:5432/mydb\nSECRET=abc\n")
     facts = extract_file_facts(str(env_file))
@@ -262,7 +262,7 @@ def test_w7_env_file_port_extraction(tmp_path):
 # ── W8: package.json 脚本端口提取 ────────────────────────────────────────────
 
 def test_w8_package_json_port_extraction(tmp_path):
-    from workspace_scanner import extract_file_facts
+    from memory_os.runtime.workspace.scanner_compat import extract_file_facts
     pkg = tmp_path / "package.json"
     pkg.write_text(json.dumps({
         "name": "my-frontend",
@@ -282,7 +282,7 @@ def test_w8_package_json_port_extraction(tmp_path):
 # ── W9: get_workspace_knowledge chunk_type 过滤 ───────────────────────────────
 
 def test_w9_filter_by_chunk_type(conn):
-    from store_workspace import resolve_workspace, link_chunk_to_workspace, get_workspace_knowledge
+    from memory_os.store.workspace import resolve_workspace, link_chunk_to_workspace, get_workspace_knowledge
     _insert_chunk(conn, "d1", "decision", "decision summary")
     _insert_chunk(conn, "c1", "design_constraint", "constraint summary")
     ws_id = resolve_workspace(conn, "/projects/filtered")
@@ -304,7 +304,7 @@ def test_w9_filter_by_chunk_type(conn):
 # ── W10: unlink_chunk_from_workspace ─────────────────────────────────────────
 
 def test_w10_unlink_non_pinned(conn):
-    from store_workspace import (resolve_workspace, link_chunk_to_workspace,
+    from memory_os.store.workspace import (resolve_workspace, link_chunk_to_workspace,
                                   unlink_chunk_from_workspace, get_workspace_knowledge)
     _insert_chunk(conn, "u1")
     ws_id = resolve_workspace(conn, "/projects/unlink")
@@ -314,7 +314,7 @@ def test_w10_unlink_non_pinned(conn):
 
 
 def test_w10_pinned_cannot_be_unlinked(conn):
-    from store_workspace import (resolve_workspace, link_chunk_to_workspace,
+    from memory_os.store.workspace import (resolve_workspace, link_chunk_to_workspace,
                                   unlink_chunk_from_workspace, get_workspace_knowledge)
     _insert_chunk(conn, "p1")
     ws_id = resolve_workspace(conn, "/projects/pinned")
@@ -327,7 +327,7 @@ def test_w10_pinned_cannot_be_unlinked(conn):
 # ── W11: list_workspaces ──────────────────────────────────────────────────────
 
 def test_w11_list_workspaces(conn):
-    from store_workspace import resolve_workspace, list_workspaces
+    from memory_os.store.workspace import resolve_workspace, list_workspaces
     import time
     resolve_workspace(conn, "/projects/alpha")
     time.sleep(0.01)
@@ -342,7 +342,7 @@ def test_w11_list_workspaces(conn):
 # ── W12: get_workspace_by_path ───────────────────────────────────────────────
 
 def test_w12_get_workspace_by_path(conn):
-    from store_workspace import resolve_workspace, get_workspace_by_path
+    from memory_os.store.workspace import resolve_workspace, get_workspace_by_path
     resolve_workspace(conn, "/projects/found")
     ws = get_workspace_by_path(conn, "/projects/found")
     assert ws is not None
@@ -350,7 +350,7 @@ def test_w12_get_workspace_by_path(conn):
 
 
 def test_w12_get_workspace_missing(conn):
-    from store_workspace import get_workspace_by_path
+    from memory_os.store.workspace import get_workspace_by_path
     ws = get_workspace_by_path(conn, "/projects/notexist")
     assert ws is None
 
@@ -358,7 +358,7 @@ def test_w12_get_workspace_missing(conn):
 # ── W13: activate_workspace returns file_facts ────────────────────────────────
 
 def test_w13_activate_returns_file_facts(conn, tmp_path):
-    from store_workspace import resolve_workspace, upsert_workspace_file, activate_workspace
+    from memory_os.store.workspace import resolve_workspace, upsert_workspace_file, activate_workspace
     ws_id = resolve_workspace(conn, str(tmp_path))
     f = tmp_path / ".env"
     f.write_text("PORT=8080\n")

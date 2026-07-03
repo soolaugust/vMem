@@ -28,14 +28,14 @@ _ROOT = Path(__file__).parent
 sys.path.insert(0, str(_ROOT))
 os.chdir(_ROOT)
 
-import tmpfs  # noqa: F401
-from store import (
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401
+from memory_os.store.api import (
     open_db, ensure_schema, insert_chunk, delete_chunks,
     pin_chunk, unpin_chunk, is_pinned, get_pinned_chunks, get_pinned_ids,
     evict_lowest_retention,
 )
-from store_mm import _reclaim_stale_chunks, damon_scan
-from config import get as _sysctl
+from memory_os.store.mm import _reclaim_stale_chunks, damon_scan
+from memory_os.config.sysctl import get as _sysctl
 
 TEST_PROJECT_A = f"test_pins_a_{uuid.uuid4().hex[:6]}"
 TEST_PROJECT_B = f"test_pins_b_{uuid.uuid4().hex[:6]}"

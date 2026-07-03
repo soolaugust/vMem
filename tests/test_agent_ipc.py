@@ -9,7 +9,7 @@ test_agent_ipc.py — 迭代103: 跨Agent知识同步 IPC 集成测试
 4. limit 参数限制消费数量
 5. 完整广播→消费流水线（模拟 extractor Stop → loader SessionStart）
 """
-import tmpfs  # noqa: F401 — must be first to isolate test DB
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — must be first to isolate test DB
 
 import sys
 import unittest
@@ -21,8 +21,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 # net/ 子系统使用独立的 net.db（不是 store.db）
 # tmpfs 隔离已覆盖 MEMORY_OS_DIR，net.db 路径跟随 NET_OS_DIR
-from net.agent_protocol import NET_DB_PATH, _open_net_db, _ensure_net_schema
-from net.agent_notify import broadcast_knowledge_update, consume_pending_notifications
+from memory_os.runtime.net.agent_protocol import NET_DB_PATH, _open_net_db, _ensure_net_schema
+from memory_os.runtime.net.agent_notify import broadcast_knowledge_update, consume_pending_notifications
 
 
 def _reset_net_db():

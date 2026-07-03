@@ -29,8 +29,13 @@
  *   - 当累计注入 > SESSION_BLOCK_MB 时：block 所有 >20KB 的 Read（除非有 limit）
  *   - 状态文件：~/.claude/memory-os/thrashing_state.json（与 thrashing_detector 共享）
  *
+ * 迭代：Read 参数规范化
+ *   Claude Code 工具适配层偶发把可选 pages 序列化为空字符串，Read 会在进入
+ *   文件读取前因 schema 校验失败。PreToolUse 支持 updatedInput，因此在本 guard
+ *   最前面删除空可选字段，避免同一个坏参数反复失败。
+ *
  * 匹配工具：Read
- * 决策：block (图片/二进制 | >100KB 且无 limit | session超限) | warn (>20KB) | allow
+ * 决策：sanitize(empty optional fields) | block (图片/二进制 | >100KB 且无 limit | session超限) | warn (>20KB) | allow
  */
 
 'use strict';
@@ -45,22 +50,68 @@ const WARN_FILE_BYTES = 20 * 1024; // 20KB  — 超过此值提示使用 limit
 // 会话级 context 增量阈值（与 thrashing_detector.py 的阈值对齐）
 const SESSION_WARN_MB = 5;   // > 5MB → warn，但不 block
 const SESSION_BLOCK_MB = 15; // > 15MB → block 中等文件（>20KB），防止 thrashing 恶化
+const POST_COMPACT_GRACE_BYTES = 5 * 1024 * 1024;
 
 // 状态文件路径（与 thrashing_detector.py 共享）
 const STATE_FILE = path.join(os.homedir(), '.claude', 'memory-os', 'thrashing_state.json');
 
+function defaultState(sessionId = '') {
+  return {
+    schema_version: 2,
+    session_id: sessionId,
+    epoch_id: 0,
+    last_compact_ts: 0,
+    post_compact_grace_until_ts: 0,
+    post_compact_grace_bytes: POST_COMPACT_GRACE_BYTES,
+    session_bytes: 0,
+    epoch_bytes: 0,
+    last_warn_ts: 0,
+    window_bytes_history: [],
+  };
+}
+
 function loadState() {
   try {
     if (fs.existsSync(STATE_FILE)) {
-      return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+      return { ...defaultState(), ...JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')) };
     }
   } catch (_) {}
-  return { session_bytes: 0, last_warn_ts: 0, window_bytes_history: [] };
+  return defaultState();
 }
 
-function getSessionMB() {
-  const state = loadState();
-  return (state.session_bytes || 0) / 1024 / 1024;
+function saveState(state) {
+  try {
+    fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state), 'utf8');
+  } catch (_) {}
+}
+
+function normalizeStateForSession(state, sessionId) {
+  if (sessionId && state.session_id && state.session_id !== sessionId) {
+    return defaultState(sessionId);
+  }
+  if (sessionId && !state.session_id) {
+    state.session_id = sessionId;
+  }
+  return state;
+}
+
+function epochBytes(state) {
+  return Number(state.epoch_bytes !== undefined ? state.epoch_bytes : state.session_bytes || 0);
+}
+
+function inPostCompactGrace(state) {
+  const graceUntilMs = Number(state.post_compact_grace_until_ts || 0) * 1000;
+  const graceBytes = Number(state.post_compact_grace_bytes || POST_COMPACT_GRACE_BYTES);
+  return graceUntilMs > Date.now() && epochBytes(state) < graceBytes;
+}
+
+function getSessionMB(sessionId) {
+  const state = normalizeStateForSession(loadState(), sessionId);
+  if (state.session_id === sessionId) {
+    saveState(state);
+  }
+  return inPostCompactGrace(state) ? 0 : epochBytes(state) / 1024 / 1024;
 }
 
 // 二进制/媒体文件扩展名 — Read 结果会 base64 膨胀，直接 block
@@ -69,6 +120,33 @@ const BINARY_EXTS = new Set([
   '.pdf', '.pptx', '.ppt', '.docx', '.doc', '.xlsx', '.xls',
   '.zip', '.tar', '.gz', '.mp4', '.mp3', '.mov', '.avi',
 ]);
+
+const EMPTY_OPTIONAL_READ_FIELDS = new Set(['pages']);
+
+function sanitizeReadInput(input) {
+  const updatedInput = { ...input };
+  let changed = false;
+
+  for (const field of EMPTY_OPTIONAL_READ_FIELDS) {
+    if (updatedInput[field] === '') {
+      delete updatedInput[field];
+      changed = true;
+    }
+  }
+
+  return changed ? updatedInput : null;
+}
+
+function writeUpdatedInput(updatedInput, reason) {
+  process.stdout.write(JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'allow',
+      permissionDecisionReason: reason,
+      updatedInput,
+    },
+  }));
+}
 
 async function main() {
   let raw = '';
@@ -89,15 +167,23 @@ async function main() {
 
   // Extract file_path and limit from tool_input
   let input;
+  let sessionId = '';
   try {
     const parsed = JSON.parse(raw);
     input = parsed.tool_input || {};
+    sessionId = parsed.session_id || '';
   } catch {
     process.exit(0);
   }
 
   const filePath = input.file_path || '';
   const hasLimit = input.limit !== undefined && input.limit !== null;
+
+  const sanitizedInput = sanitizeReadInput(input);
+  if (sanitizedInput) {
+    writeUpdatedInput(sanitizedInput, '[filesize_guard] Removed empty optional Read fields');
+    process.exit(0);
+  }
 
   if (!filePath) {
     process.exit(0);
@@ -148,7 +234,7 @@ async function main() {
 
   // === 会话级 context 增量检查（session_context_guard）===
   // OS 类比：cgroup memory.limit_in_bytes — 进程组级累计上限
-  const sessionMB = getSessionMB();
+  const sessionMB = getSessionMB(sessionId);
 
   if (sessionMB >= SESSION_BLOCK_MB && fileSize > WARN_FILE_BYTES && !hasLimit) {
     // session 已累计 >15MB，中等文件也需要分段

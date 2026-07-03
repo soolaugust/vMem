@@ -35,8 +35,8 @@ def tmpdb(tmp_path):
 
 @pytest.fixture()
 def conn(tmpdb):
-    from store_vfs import open_db
-    from store_episodes import ensure_episodes_schema
+    from memory_os.store.vfs_compat import open_db
+    from memory_os.store.episodes import ensure_episodes_schema
     c = open_db(tmpdb)
     ensure_episodes_schema(c)
     yield c
@@ -46,7 +46,7 @@ def conn(tmpdb):
 # ── E1: write + get by project ────────────────────────────────────────────────
 
 def test_e1_write_and_get_by_project(conn):
-    from store_episodes import write_episode, get_recent_episodes
+    from memory_os.store.episodes import write_episode, get_recent_episodes
     write_episode(conn, "sess1", "proj_a", "做了功能 X", chunks_created=3)
     write_episode(conn, "sess2", "proj_a", "修复了 bug Y", chunks_created=1)
     eps = get_recent_episodes(conn, "proj_a", limit=10)
@@ -55,7 +55,7 @@ def test_e1_write_and_get_by_project(conn):
 
 
 def test_e1_different_projects_isolated(conn):
-    from store_episodes import write_episode, get_recent_episodes
+    from memory_os.store.episodes import write_episode, get_recent_episodes
     write_episode(conn, "s1", "proj_a", "A 的工作")
     write_episode(conn, "s2", "proj_b", "B 的工作")
     eps_a = get_recent_episodes(conn, "proj_a")
@@ -66,7 +66,7 @@ def test_e1_different_projects_isolated(conn):
 # ── E2: get by workspace_id ───────────────────────────────────────────────────
 
 def test_e2_get_by_workspace_id(conn):
-    from store_episodes import write_episode, get_recent_episodes
+    from memory_os.store.episodes import write_episode, get_recent_episodes
     write_episode(conn, "s1", "proj_a", "workspace A 工作",
                   workspace_id="ws_aaa")
     write_episode(conn, "s2", "proj_a", "workspace B 工作",
@@ -79,7 +79,7 @@ def test_e2_get_by_workspace_id(conn):
 # ── E3: mark_episode_injected ─────────────────────────────────────────────────
 
 def test_e3_mark_injected(conn):
-    from store_episodes import write_episode, mark_episode_injected
+    from memory_os.store.episodes import write_episode, mark_episode_injected
     write_episode(conn, "s1", "proj", "工作")
     mark_episode_injected(conn, "s1")
     mark_episode_injected(conn, "s1")
@@ -92,7 +92,7 @@ def test_e3_mark_injected(conn):
 # ── E4: build_episode_summary ─────────────────────────────────────────────────
 
 def test_e4_build_summary_with_files(tmp_path):
-    from store_episodes import build_episode_summary
+    from memory_os.store.episodes import build_episode_summary
     msg = "完成了功能 X 的实现，修复了相关的单元测试。"
     s = build_episode_summary(msg, chunks_created=5,
                                files_modified=["hooks/loader.py", "tests/test_loader.py"],
@@ -102,7 +102,7 @@ def test_e4_build_summary_with_files(tmp_path):
 
 
 def test_e4_build_summary_empty_msg():
-    from store_episodes import build_episode_summary
+    from memory_os.store.episodes import build_episode_summary
     s = build_episode_summary("", chunks_created=0, files_modified=[], tools_used={})
     assert len(s) > 0  # 不为空
 
@@ -110,7 +110,7 @@ def test_e4_build_summary_empty_msg():
 # ── E5: format_episodes_for_injection ────────────────────────────────────────
 
 def test_e5_format_episodes(conn):
-    from store_episodes import write_episode, get_recent_episodes, format_episodes_for_injection
+    from memory_os.store.episodes import write_episode, get_recent_episodes, format_episodes_for_injection
     write_episode(conn, "s1", "proj", "实现了登录功能", chunks_created=2,
                   files_modified=["auth.py"])
     eps = get_recent_episodes(conn, "proj")
@@ -120,7 +120,7 @@ def test_e5_format_episodes(conn):
 
 
 def test_e5_format_respects_max_chars(conn):
-    from store_episodes import write_episode, get_recent_episodes, format_episodes_for_injection
+    from memory_os.store.episodes import write_episode, get_recent_episodes, format_episodes_for_injection
     for i in range(10):
         write_episode(conn, f"s{i}", "proj",
                       "x" * 150, chunks_created=i)
@@ -132,7 +132,7 @@ def test_e5_format_respects_max_chars(conn):
 # ── E6: ordering ──────────────────────────────────────────────────────────────
 
 def test_e6_ordering(conn):
-    from store_episodes import write_episode, get_recent_episodes
+    from memory_os.store.episodes import write_episode, get_recent_episodes
     import time
     write_episode(conn, "old", "proj", "旧 session", ended_at="2026-01-01T00:00:00+00:00")
     time.sleep(0.01)
@@ -144,5 +144,5 @@ def test_e6_ordering(conn):
 # ── E7: empty → empty string ──────────────────────────────────────────────────
 
 def test_e7_empty_episodes(conn):
-    from store_episodes import format_episodes_for_injection
+    from memory_os.store.episodes import format_episodes_for_injection
     assert format_episodes_for_injection([]) == ""

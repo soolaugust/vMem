@@ -28,10 +28,10 @@ import time
 
 # tmpfs 测试隔离
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: F401 — 必须在 store 之前
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 必须在 store 之前
 
-from store_core import open_db, ensure_schema, insert_chunk
-from store_mm import prune_icache_sb
+from memory_os.store.core import open_db, ensure_schema, insert_chunk
+from memory_os.store.mm import prune_icache_sb
 from datetime import datetime, timezone, timedelta
 import pytest
 
@@ -321,7 +321,7 @@ def test_disabled():
 
     from unittest.mock import patch
     original_get = None
-    import config
+    import memory_os.config.sysctl as config
     original_get = config.get
 
     def mock_get(key, **kw):

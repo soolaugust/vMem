@@ -23,8 +23,8 @@ from datetime import datetime, timezone, timedelta
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
-from store import (
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+from memory_os.store.api import (
     open_db, ensure_schema, insert_chunk, delete_chunks,
     set_oom_adj, get_oom_adj, batch_set_oom_adj, get_protected_chunks,
     evict_lowest_retention, swap_out, swap_in, proc_stats,
@@ -32,7 +32,7 @@ from store import (
     OOM_ADJ_DEFAULT, OOM_ADJ_PREFER, OOM_ADJ_MAX,
     _reclaim_stale_chunks,
 )
-from schema import MemoryChunk
+from memory_os.core.schema import MemoryChunk
 
 PROJECT = "test_oom_score"
 

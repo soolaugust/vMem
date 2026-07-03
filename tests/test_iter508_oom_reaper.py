@@ -4,13 +4,13 @@ OS 类比：Linux oom_reaper (Michal Hocko, 2016)
 ——OOM killer 选中牺牲进程后，oom_reaper 立即回收匿名页，
 不等待进程卡在 D 状态自行释放。
 """
-import tmpfs  # noqa: F401 — 测试隔离（必须在 store 之前 import）
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 测试隔离（必须在 store 之前 import）
 import pytest
 import uuid
 from datetime import datetime, timezone
 
-from store_vfs import open_db, ensure_schema, insert_chunk, oom_reaper
-import config
+from memory_os.store.vfs_compat import open_db, ensure_schema, insert_chunk, oom_reaper
+import memory_os.config.sysctl as config
 
 
 @pytest.fixture(autouse=True)

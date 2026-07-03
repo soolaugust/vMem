@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.chdir(str(Path(__file__).resolve().parent.parent))
 
-from store_core import open_db, ensure_schema, insert_chunk, already_exists, bump_chunk_version
+from memory_os.store.core import open_db, ensure_schema, insert_chunk, already_exists, bump_chunk_version
 
 # iter115: 从 self-improving/ 导入的知识是跨项目方法论，应写入 global tier
 # 而非当前工作目录的 project ID（否则在其他 project 中被 NUMA penalty -0.25）
@@ -37,7 +37,7 @@ stats = {"scanned": 0, "imported": 0, "skipped_dup": 0, "skipped_low": 0}
 def _get_import_defaults():
     """迭代515: userfaultfd — 从 sysctl 读取 import 默认 importance/oom_adj。"""
     try:
-        from config import get as _cfg
+        from memory_os.config.sysctl import get as _cfg
         return _cfg("userfaultfd.import_base_importance"), _cfg("userfaultfd.import_oom_adj")
     except Exception:
         return 0.50, 300
@@ -622,7 +622,7 @@ def incremental_import():
             "SELECT COUNT(*) FROM pragma_table_info('memory_chunks') WHERE name='chunk_state'"
         ).fetchone()[0]
         _fi_where = "chunk_state='ACTIVE' AND summary != ''" if _has_state else "id NOT LIKE 'swap_%'"
-        from store_vfs import _cjk_tokenize, _normalize_structured_summary
+        from memory_os.store.vfs_compat import _cjk_tokenize, _normalize_structured_summary
         _fi_missing = conn.execute(
             f"SELECT mc.rowid, mc.id, mc.summary, mc.content FROM memory_chunks mc "
             f"WHERE mc.{_fi_where} AND mc.rowid NOT IN "

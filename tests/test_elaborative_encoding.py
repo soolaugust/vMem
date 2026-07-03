@@ -36,8 +36,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "hooks"))
 
-import tmpfs  # noqa
-from store_vfs import (
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
+from memory_os.store.vfs_compat import (
     ensure_schema,
     compute_depth_of_processing,
     apply_depth_of_processing,

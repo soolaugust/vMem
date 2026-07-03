@@ -13,7 +13,7 @@ import os
 
 # ── tmpfs isolation ──────────────────────────────────────────────
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: F401 — sets up isolated DB before any store import
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — sets up isolated DB before any store import
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hooks"))
 
@@ -22,8 +22,8 @@ import json
 import time
 from datetime import datetime, timezone
 
-from store_vfs import open_db, ensure_schema, insert_chunk, _vfs_write_protect
-from store_mm import IoUringSQ
+from memory_os.store.vfs_compat import open_db, ensure_schema, insert_chunk, _vfs_write_protect
+from memory_os.store.mm import IoUringSQ
 
 
 def _setup_db():
@@ -224,7 +224,7 @@ def test_swap_in_guard():
     conn.commit()
 
     # Now try swap_in
-    from store_swap import swap_in
+    from memory_os.store.swap import swap_in
     result = swap_in(conn, ["corrupted-swap-001"])
     conn.commit()
 

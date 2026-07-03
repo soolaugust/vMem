@@ -6,9 +6,9 @@ OS 类比：Linux cgroup v2 cpu.max (Tejun Heo, 2015) — 硬性 CPU 带宽限�
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: E402 — 测试隔离
-from scorer import bandwidth_throttle, retrieval_score, saturation_penalty
-from config import get as sysctl
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402 — 测试隔离
+from memory_os.core.scorer import bandwidth_throttle, retrieval_score, saturation_penalty
+from memory_os.config.sysctl import get as sysctl
 
 
 def test_below_threshold_returns_1():

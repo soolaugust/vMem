@@ -49,10 +49,10 @@ from typing import Optional
 
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
-from utils import resolve_project_id
-from store import open_db, ensure_schema, fts_search as _fts_search
-from bm25 import hybrid_tokenize as _tokenize, bm25_normalized as _bm25_norm  # 迭代22: Shared Library（非 SQLite 源仍用）
-from config import get as _sysctl  # 迭代27: sysctl Runtime Tunables
+from memory_os.core.utils import resolve_project_id
+from memory_os.store.api import open_db, ensure_schema, fts_search as _fts_search
+from memory_os.core.bm25 import hybrid_tokenize as _tokenize, bm25_normalized as _bm25_norm  # 迭代22: Shared Library（非 SQLite 源仍用）
+from memory_os.config.sysctl import get as _sysctl  # 迭代27: sysctl Runtime Tunables
 
 MEMORY_OS_DIR = Path.home() / ".claude" / "memory-os"
 STORE_DB = MEMORY_OS_DIR / "store.db"

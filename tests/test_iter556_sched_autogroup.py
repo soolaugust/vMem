@@ -88,7 +88,7 @@ def _isolate_autogroup(tmp_path, monkeypatch):
     ag_file = str(tmp_path / "sched_autogroup.json")
     monkeypatch.setattr("store_mm._AUTOGROUP_FILE", ag_file)
     # 隔离 config sysctl.json 到临时目录
-    import config
+    import memory_os.config.sysctl as config
     sysctl_file = str(tmp_path / "sysctl.json")
     monkeypatch.setattr(config, "SYSCTL_FILE", sysctl_file)
     monkeypatch.setattr(config, "MEMORY_OS_DIR", str(tmp_path))
@@ -102,14 +102,14 @@ class TestSchedAutogroupLoadSave:
     """load/save 持久化测试。"""
 
     def test_load_missing_file(self):
-        from store_mm import sched_autogroup_load
+        from memory_os.store.mm import sched_autogroup_load
         state = sched_autogroup_load()
         assert state["adjustments"] == []
         assert state["last_run_session"] == 0
         assert state["cooldown_sessions"] == 3
 
     def test_save_load_roundtrip(self, tmp_path, monkeypatch):
-        from store_mm import sched_autogroup_load, sched_autogroup_save
+        from memory_os.store.mm import sched_autogroup_load, sched_autogroup_save
         state = {
             "adjustments": [{"param": "x", "old": 1, "new": 2, "reason": "test"}],
             "last_run_session": 7,
@@ -121,7 +121,7 @@ class TestSchedAutogroupLoadSave:
         assert len(loaded["adjustments"]) == 1
 
     def test_load_corrupt_file(self, tmp_path, monkeypatch):
-        from store_mm import sched_autogroup_load, _AUTOGROUP_FILE
+        from memory_os.store.mm import sched_autogroup_load, _AUTOGROUP_FILE
         Path(_AUTOGROUP_FILE).parent.mkdir(parents=True, exist_ok=True)
         Path(_AUTOGROUP_FILE).write_text("not json{{{", encoding="utf-8")
         state = sched_autogroup_load()
@@ -132,7 +132,7 @@ class TestSchedAutogroupCooldown:
     """冷却期测试。"""
 
     def test_skip_during_cooldown(self, tmp_path, monkeypatch):
-        from store_mm import sched_autogroup, sched_autogroup_save
+        from memory_os.store.mm import sched_autogroup, sched_autogroup_save
         # 设置 last_run_session=8，当前 session=10，cooldown=3 → 间隔 2 < 3，应跳过
         sched_autogroup_save({
             "adjustments": [], "last_run_session": 8, "cooldown_sessions": 3,
@@ -143,7 +143,7 @@ class TestSchedAutogroupCooldown:
         assert "cooldown" in result["skipped_reason"]
 
     def test_pass_after_cooldown(self, tmp_path, monkeypatch):
-        from store_mm import sched_autogroup, sched_autogroup_save
+        from memory_os.store.mm import sched_autogroup, sched_autogroup_save
         # 设置 last_run_session=5，当前 session=10，cooldown=3 → 间隔 5 >= 3，不跳过
         sched_autogroup_save({
             "adjustments": [], "last_run_session": 5, "cooldown_sessions": 3,
@@ -158,7 +158,7 @@ class TestSchedAutogroupInsufficientData:
     """数据不足跳过。"""
 
     def test_skip_with_few_sessions(self):
-        from store_mm import sched_autogroup
+        from memory_os.store.mm import sched_autogroup
         ss = _make_schedstat(session_count=3)
         result = sched_autogroup(ss)
         assert not result["adjusted"]
@@ -169,8 +169,8 @@ class TestSchedAutogroupRule1:
     """规则1: 高空转 → 降低 timer_slack.idle_threshold。"""
 
     def test_lower_idle_threshold(self):
-        from store_mm import sched_autogroup
-        from config import get as cfg_get
+        from memory_os.store.mm import sched_autogroup
+        from memory_os.config.sysctl import get as cfg_get
         subs = _make_high_idle_subsystems(count=5, skip_rate=0.90)
         ss = _make_schedstat(session_count=10, subsystems=subs)
         result = sched_autogroup(ss)
@@ -185,8 +185,8 @@ class TestSchedAutogroupRule1:
 
     def test_idle_threshold_floor(self, monkeypatch):
         """idle_threshold 不低于 1。"""
-        from store_mm import sched_autogroup
-        from config import sysctl_set
+        from memory_os.store.mm import sched_autogroup
+        from memory_os.config.sysctl import sysctl_set
         sysctl_set("timer_slack.idle_threshold", 1)
         subs = _make_high_idle_subsystems(count=5, skip_rate=0.90)
         ss = _make_schedstat(session_count=10, subsystems=subs)
@@ -201,8 +201,8 @@ class TestSchedAutogroupRule2:
     """规则2: degrading → 收紧 sched_deadline.budget_ms。"""
 
     def test_tighten_budget_on_degrading(self):
-        from store_mm import sched_autogroup
-        from config import get as cfg_get
+        from memory_os.store.mm import sched_autogroup
+        from memory_os.config.sysctl import get as cfg_get
         boot_times = _degrading_boot_times(10)
         ss = _make_schedstat(session_count=10, boot_times=boot_times)
         result = sched_autogroup(ss)
@@ -215,8 +215,8 @@ class TestSchedAutogroupRule2:
 
     def test_budget_ms_floor(self, monkeypatch):
         """budget_ms 不低于 5.0。"""
-        from store_mm import sched_autogroup
-        from config import sysctl_set
+        from memory_os.store.mm import sched_autogroup
+        from memory_os.config.sysctl import sysctl_set
         sysctl_set("sched_deadline.budget_ms", 5.5)
         boot_times = _degrading_boot_times(10)
         ss = _make_schedstat(session_count=10, boot_times=boot_times)
@@ -231,8 +231,8 @@ class TestSchedAutogroupRule3:
     """规则3: improving + high work_rate → 放松 budget_ms。"""
 
     def test_relax_budget_on_improving(self):
-        from store_mm import sched_autogroup
-        from config import get as cfg_get
+        from memory_os.store.mm import sched_autogroup
+        from memory_os.config.sysctl import get as cfg_get
         boot_times = _improving_boot_times(10)
         # 构造 work_rate > 0.60
         subs = {}
@@ -252,8 +252,8 @@ class TestSchedAutogroupRule3:
 
     def test_budget_ms_ceiling(self, monkeypatch):
         """budget_ms 不超过 50.0。"""
-        from store_mm import sched_autogroup
-        from config import sysctl_set
+        from memory_os.store.mm import sched_autogroup
+        from memory_os.config.sysctl import sysctl_set
         sysctl_set("sched_deadline.budget_ms", 49.0)
         boot_times = _improving_boot_times(10)
         subs = {f"sub_{i}": {
@@ -273,7 +273,7 @@ class TestSchedAutogroupRule4:
     """规则4: 低 work_rate → 收紧 cgroup_budget.group_budget_ms。"""
 
     def test_tighten_group_budget_on_low_work_rate(self):
-        from store_mm import sched_autogroup
+        from memory_os.store.mm import sched_autogroup
         # 构造 work_rate < 0.30
         subs = {}
         for i in range(5):
@@ -292,8 +292,8 @@ class TestSchedAutogroupRule4:
 
     def test_group_budget_floor(self, monkeypatch):
         """group_budget_ms 不低于 20.0。"""
-        from store_mm import sched_autogroup
-        from config import sysctl_set
+        from memory_os.store.mm import sched_autogroup
+        from memory_os.config.sysctl import sysctl_set
         sysctl_set("cgroup_budget.group_budget_ms", 22.0)
         subs = {f"sub_{i}": {
             "exec_count": 10, "skip_total": 0, "skip_idle": 0,
@@ -312,7 +312,7 @@ class TestSchedAutogroupRule5:
     """规则5: 高 work_rate + improving → 放松 group_budget_ms。"""
 
     def test_relax_group_budget_on_high_work_rate(self):
-        from store_mm import sched_autogroup
+        from memory_os.store.mm import sched_autogroup
         boot_times = _improving_boot_times(10)
         subs = {f"sub_{i}": {
             "exec_count": 10, "skip_total": 0, "skip_idle": 0,
@@ -329,8 +329,8 @@ class TestSchedAutogroupRule5:
 
     def test_group_budget_ceiling(self, monkeypatch):
         """group_budget_ms 不超过 120.0。"""
-        from store_mm import sched_autogroup
-        from config import sysctl_set
+        from memory_os.store.mm import sched_autogroup
+        from memory_os.config.sysctl import sysctl_set
         sysctl_set("cgroup_budget.group_budget_ms", 119.0)
         boot_times = _improving_boot_times(10)
         subs = {f"sub_{i}": {
@@ -350,7 +350,7 @@ class TestSchedAutogroupNoAction:
     """无需调整场景。"""
 
     def test_stable_no_adjustment(self):
-        from store_mm import sched_autogroup
+        from memory_os.store.mm import sched_autogroup
         # stable 趋势，正常 work_rate，低空转 → 无调整
         subs = {f"sub_{i}": {
             "exec_count": 10, "skip_total": 2, "skip_idle": 2,
@@ -367,7 +367,7 @@ class TestSchedAutogroupMultipleRules:
     """多规则同时触发。"""
 
     def test_degrading_plus_high_idle(self):
-        from store_mm import sched_autogroup
+        from memory_os.store.mm import sched_autogroup
         boot_times = _degrading_boot_times(10)
         subs = _make_high_idle_subsystems(count=5, skip_rate=0.90)
         # 同时低 work rate (did_work=1/2 exec)
@@ -386,7 +386,7 @@ class TestSchedAutogroupHistoryLimit:
     """调整记录上限 (20条)。"""
 
     def test_history_capped_at_20(self, tmp_path, monkeypatch):
-        from store_mm import sched_autogroup, sched_autogroup_save, sched_autogroup_load
+        from memory_os.store.mm import sched_autogroup, sched_autogroup_save, sched_autogroup_load
         # 预填 25 条历史
         state = {
             "adjustments": [{"param": f"x{i}", "old": i, "new": i+1,
@@ -409,7 +409,7 @@ class TestSchedAutogroupStats:
     """stats 输出结构。"""
 
     def test_stats_structure(self):
-        from store_mm import sched_autogroup_stats
+        from memory_os.store.mm import sched_autogroup_stats
         ss = _make_schedstat(session_count=10)
         stats = sched_autogroup_stats(ss)
         assert "total_adjustments" in stats
@@ -425,8 +425,8 @@ class TestSchedAutogroupCooldownConfigurable:
     """cooldown 可通过 config 配置。"""
 
     def test_custom_cooldown(self, tmp_path, monkeypatch):
-        from store_mm import sched_autogroup, sched_autogroup_save
-        from config import sysctl_set
+        from memory_os.store.mm import sched_autogroup, sched_autogroup_save
+        from memory_os.config.sysctl import sysctl_set
         sysctl_set("sched_autogroup.cooldown_sessions", 5)
         # last_run=6, session=10, cooldown=5 → 间隔 4 < 5，应跳过
         # 但实际 sched_autogroup 内部从 ag_state 读取 cooldown_sessions

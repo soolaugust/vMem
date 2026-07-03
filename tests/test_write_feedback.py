@@ -5,10 +5,10 @@ import sys, os, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from datetime import datetime, timezone, timedelta
-from store_vfs import open_db, ensure_schema, insert_chunk
-from store_graph import ensure_graph_schema
-from schema import MemoryChunk
-from write_feedback import (
+from memory_os.store.vfs_compat import open_db, ensure_schema, insert_chunk
+from memory_os.store.graph import ensure_graph_schema
+from memory_os.core.schema import MemoryChunk
+from memory_os.runtime.write_feedback_compat import (
     check_retrievability, attach_evidence_to_decision,
     decay_stale_pins, get_write_throttle_factor
 )
@@ -101,7 +101,7 @@ class TestPinDecay:
 
     def test_hard_to_soft_after_threshold(self):
         conn = _get_conn()
-        from store_vfs import pin_chunk
+        from memory_os.store.vfs_compat import pin_chunk
         cid = _insert(conn, "old pinned chunk that nobody reads anymore ever")
         # Pin it with old date
         old_date = (datetime.now(timezone.utc) - timedelta(days=20)).isoformat()

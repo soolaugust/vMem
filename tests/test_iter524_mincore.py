@@ -30,11 +30,11 @@ from datetime import datetime, timezone, timedelta
 
 # ── test isolation ──
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: E402, F401 — test isolation (must precede store imports)
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402, F401 — test isolation (must precede store imports)
 
-from store_vfs import open_db, ensure_schema
-from store_core import bump_chunk_version, dmesg_log, DMESG_INFO
-from store_mm import mincore
+from memory_os.store.vfs_compat import open_db, ensure_schema
+from memory_os.store.core import bump_chunk_version, dmesg_log, DMESG_INFO
+from memory_os.store.mm import mincore
 
 
 def _setup_db():
@@ -230,7 +230,7 @@ def test_T11_mincore_then_access_promotes():
     conn.commit()
 
     # Step 3: numa_balancing 可以 promote
-    from store_mm import numa_balancing
+    from memory_os.store.mm import numa_balancing
     nb_result = numa_balancing(conn, "test_mincore")
     row2 = conn.execute("SELECT importance FROM memory_chunks WHERE summary = 'mc_promote test'").fetchone()
     # 被 access 后应该被 promote 或至少不低于 calibrated
@@ -245,7 +245,7 @@ def test_T12_bump_chunk_version():
     _make_chunk(conn, "ver test 2", importance=0.85, access_count=0)
 
     # 获取初始 version
-    from store_core import MEMORY_OS_DIR
+    from memory_os.store.core import MEMORY_OS_DIR
     ver_file = Path(MEMORY_OS_DIR) / ".chunk_version"
     v_before = 0
     if ver_file.exists():

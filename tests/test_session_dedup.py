@@ -26,9 +26,9 @@ from datetime import datetime, timezone, timedelta
 _ROOT = Path(__file__).parent
 sys.path.insert(0, str(_ROOT))
 
-import tmpfs  # noqa: F401
-import config
-from config import get as _sysctl
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401
+import memory_os.config.sysctl as config
+from memory_os.config.sysctl import get as _sysctl
 
 
 # ── 模拟 inject dedup 逻辑（直接测试逻辑，无需启动完整 retriever）──

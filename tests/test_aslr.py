@@ -24,8 +24,8 @@ import time
 sys.path.insert(0, os.path.dirname(__file__))
 os.environ.setdefault("CLAUDE_CWD", str(__import__("pathlib").Path(__file__).parent.parent.parent.parent.parent))
 
-from scorer import exploration_bonus, retrieval_score
-from config import get as sysctl_get
+from memory_os.core.scorer import exploration_bonus, retrieval_score
+from memory_os.config.sysctl import get as sysctl_get
 from datetime import datetime, timezone
 
 _PASS = 0
@@ -92,7 +92,7 @@ def test_cross_chunk_diversity():
 def test_epsilon_zero_disables():
     """T6: epsilon=0 → 全部 bonus=0"""
     os.environ["MEMORY_OS_SCORER_ASLR_EPSILON"] = "0"
-    from config import _invalidate_cache
+    from memory_os.config.sysctl import _invalidate_cache
     _invalidate_cache()
 
     bonus = exploration_bonus("chunk_abc", 0, "test_query")

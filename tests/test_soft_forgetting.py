@@ -32,7 +32,7 @@ def tmpdb(tmp_path):
 
 @pytest.fixture()
 def conn(tmpdb):
-    from store_vfs import open_db, ensure_schema
+    from memory_os.store.vfs_compat import open_db, ensure_schema
     c = open_db(tmpdb)
     ensure_schema(c)
     yield c
@@ -130,7 +130,7 @@ def test_sf4_missing_retrievability_defaults_to_full():
 
 def test_sf5_fts_search_returns_retrievability(conn):
     """fts_search 返回的 chunk dict 应包含 retrievability 字段"""
-    from store_vfs import fts_search
+    from memory_os.store.vfs_compat import fts_search
     _insert_chunk(conn, "fts_c1", retrievability=0.05, summary="FTS5 遗忘测试")
     results = fts_search(conn, "遗忘测试", "proj", top_k=5)
     if results:

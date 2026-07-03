@@ -8,9 +8,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-import tmpfs  # noqa: F401
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401
 
-from store_vfs import _normalize_structured_summary
+from memory_os.store.vfs_compat import _normalize_structured_summary
 
 
 class TestTagStripping:

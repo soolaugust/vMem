@@ -26,8 +26,8 @@ _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(_ROOT / "tests"))
 
-import tmpfs  # noqa: F401
-from store import open_db, ensure_schema, insert_chunk
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401
+from memory_os.store.api import open_db, ensure_schema, insert_chunk
 
 PROJECT = f"token_budget_{uuid.uuid4().hex[:6]}"
 
@@ -66,7 +66,7 @@ def _insert_with_snippet(conn, chunk_dict: dict, raw_snippet: str = ""):
 
 def test_T1_injection_volume_respects_max_context_chars():
     """注入生成的 context_text 长度 <= max_context_chars（默认 800）"""
-    from config import get as _cfg
+    from memory_os.config.sysctl import get as _cfg
 
     max_chars = _cfg("retriever.max_context_chars")
 
@@ -164,7 +164,7 @@ def test_T3_session_dedup_excludes_over_threshold_chunks():
     被注入次数 >= session_dedup_threshold 的 chunk 被排除在 context 外
     → 避免无价值重复注入消耗 token
     """
-    from config import get as _cfg
+    from memory_os.config.sysctl import get as _cfg
 
     threshold = _cfg("retriever.session_dedup_threshold")
     assert threshold > 0, f"session_dedup_threshold 应 > 0，当前 {threshold}"
@@ -324,7 +324,7 @@ def test_T6_token_roi_summary():
     一次典型 FULL 注入（5个 chunk）的 token 消耗估算，
     与不使用 memory-os 相比的节省量。
     """
-    from config import get as _cfg
+    from memory_os.config.sysctl import get as _cfg
 
     max_chars = _cfg("retriever.max_context_chars")
     dedup_threshold = _cfg("retriever.session_dedup_threshold")

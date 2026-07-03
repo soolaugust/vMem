@@ -5,14 +5,14 @@ OS 类比：Linux /proc/vmstat pgscan_kswapd/pgsteal_kswapd (Mel Gorman, 2004)
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: E402, F401 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402, F401 — 测试隔离
 import json
 import sqlite3
 import pytest
 from datetime import datetime, timezone, timedelta
-from store_vfs import open_db, ensure_schema, insert_chunk
-from store_mm import vmstat_scan
-from store_core import bump_chunk_version
+from memory_os.store.vfs_compat import open_db, ensure_schema, insert_chunk
+from memory_os.store.mm import vmstat_scan
+from memory_os.store.core import bump_chunk_version
 
 
 PROJECT = "test:vmstat"
@@ -260,7 +260,7 @@ class TestDemotion:
 
     def test_chunk_version_bumped_on_demotion(self):
         """chunk_version is bumped when demotions occur (TLB invalidation)."""
-        from store_vfs import CHUNK_VERSION_FILE
+        from memory_os.store.vfs_compat import CHUNK_VERSION_FILE
         conn = _setup_db()
         _insert_chunk(conn, "dark-bump", importance=0.4, access_count=0, oom_adj=0)
         for _ in range(6):

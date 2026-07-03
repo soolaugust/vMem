@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
 
-from store import open_db, ensure_schema
+from memory_os.store.api import open_db, ensure_schema
 
 
 # ── 判断 content 是否已经是"富" content（被 iter324/326 处理过的）──

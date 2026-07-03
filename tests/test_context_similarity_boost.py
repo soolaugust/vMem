@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "hooks"))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
 # 直接从 retriever 导入 _compute_context_match 逻辑做纯函数测试
 # 由于 _compute_context_match 是嵌套函数，我们提取等效逻辑做单元测试
@@ -250,7 +250,7 @@ def test_cc9_empty_context_returns_zero():
 
 def test_cc10_all_session_types_recognized():
     """验证 extract_encoding_context 能识别所有已知 session_type。"""
-    from store_vfs import extract_encoding_context
+    from memory_os.store.vfs_compat import extract_encoding_context
 
     test_cases = {
         "debug error fix crash": "debug",

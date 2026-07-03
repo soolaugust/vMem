@@ -36,7 +36,7 @@ def _get_hook_event(hook_input: dict) -> str:
 
 def _handle_subagent_start(hook_input: dict) -> None:
     """SubagentStart: 提交新 agent task 到调度器"""
-    from sched.agent_scheduler import Scheduler, AgentTask, NiceLevel
+    from memory_os.runtime.sched.agent_scheduler import Scheduler, AgentTask, NiceLevel
 
     session_id = hook_input.get("session_id", "") or os.environ.get("CLAUDE_SESSION_ID", "")
     subagent_id = hook_input.get("subagent_id", "") or "unknown"
@@ -68,7 +68,7 @@ def _handle_subagent_start(hook_input: dict) -> None:
 
 def _handle_subagent_stop(hook_input: dict) -> None:
     """SubagentStop: 标记 agent task 为 completed"""
-    from sched.agent_scheduler import Scheduler
+    from memory_os.runtime.sched.agent_scheduler import Scheduler
 
     subagent_id = hook_input.get("subagent_id", "") or "unknown"
     tokens_used = int(hook_input.get("tokens_used", 0))

@@ -20,12 +20,12 @@ from pathlib import Path
 
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
-from schema import MemoryChunk
-from utils import resolve_project_id
-from scorer import working_set_score as _unified_ws_score
-from store import open_db, ensure_schema, get_chunks as store_get_chunks, dmesg_log, DMESG_INFO, DMESG_WARN, DMESG_DEBUG, watchdog_check, damon_scan, mglru_aging, checkpoint_restore, autotune, gc_traces, rmap_sweep, vma_merge, page_idle_scan, page_idle_mark, gc_orphan_swap, gc_namespace, overcommit_kill, ksm_scan, perf_counters
-from config import get as _sysctl  # 迭代27: sysctl Runtime Tunables
-from store_mm import (timer_slack_load, timer_slack_should_skip,  # iter552
+from memory_os.core.schema import MemoryChunk
+from memory_os.core.utils import resolve_project_id
+from memory_os.core.scorer import working_set_score as _unified_ws_score
+from memory_os.store.api import open_db, ensure_schema, get_chunks as store_get_chunks, dmesg_log, DMESG_INFO, DMESG_WARN, DMESG_DEBUG, watchdog_check, damon_scan, mglru_aging, checkpoint_restore, autotune, gc_traces, rmap_sweep, vma_merge, page_idle_scan, page_idle_mark, gc_orphan_swap, gc_namespace, overcommit_kill, ksm_scan, perf_counters
+from memory_os.config.sysctl import get as _sysctl  # 迭代27: sysctl Runtime Tunables
+from memory_os.store.mm import (timer_slack_load, timer_slack_should_skip,  # iter552
                       timer_slack_report, timer_slack_tick, timer_slack_save,
                       timer_slack_stats,
                       sched_deadline_load, sched_deadline_save,  # iter553
@@ -210,7 +210,7 @@ def _load_working_set_from_checkpoint(project: str) -> tuple:
 
             # ── iter529: sched_rt_bandwidth — CRIU 路径同样排除垄断 chunk ──
             try:
-                from store_mm import sched_rt_bandwidth
+                from memory_os.store.mm import sched_rt_bandwidth
                 candidate_ids = [item[3] for item in scored if len(item) > 3 and item[3]]
                 if candidate_ids:
                     bw_result = sched_rt_bandwidth(conn, project, candidate_ids)
@@ -289,7 +289,7 @@ def _load_working_set(project: str) -> list:
     # ── iter529: sched_rt_bandwidth — 排除超过带宽上限的 chunk ──
     # OS 类比：sched_rt_runtime_us 限制 RT 任务带宽，防止 CPU 垄断
     try:
-        from store_mm import sched_rt_bandwidth
+        from memory_os.store.mm import sched_rt_bandwidth
         candidate_ids = [item[3] for item in scored if len(item) > 3 and item[3]]
         if candidate_ids:
             bw_result = sched_rt_bandwidth(conn, project, candidate_ids)
@@ -470,9 +470,9 @@ def _preheat_retriever(conn, project: str) -> None:
     t0 = _t.time()
     try:
         # 1. import heavy modules — 触发 Python bytecode cache 加载
-        from scorer import retrieval_score  # noqa: F401
-        from bm25 import hybrid_tokenize, bm25_scores  # noqa: F401
-        from store import fts_search
+        from memory_os.core.scorer import retrieval_score  # noqa: F401
+        from memory_os.core.bm25 import hybrid_tokenize, bm25_scores  # noqa: F401
+        from memory_os.store.api import fts_search
         # 2. 空查询预热 FTS5 索引页 — 触发 SQLite page cache 加载
         fts_search(conn, "warmup", project, top_k=1)
     except Exception:
@@ -609,10 +609,10 @@ def main():
             _ROOT_WS = Path(__file__).parent.parent
             if str(_ROOT_WS) not in _sys_ws.path:
                 _sys_ws.path.insert(0, str(_ROOT_WS))
-            from store_workspace import resolve_workspace, activate_workspace
-            from workspace_scanner import scan_and_store
+            from memory_os.store.workspace import resolve_workspace, activate_workspace
+            from memory_os.runtime.workspace.scanner_compat import scan_and_store
             _ws_conn = open_db()
-            from store_workspace import ensure_workspace_schema as _ensure_ws
+            from memory_os.store.workspace import ensure_workspace_schema as _ensure_ws
             _ensure_ws(_ws_conn)
             _ws_id = resolve_workspace(_ws_conn, _cwd)
             # 增量扫描（hash 比对，只处理变更文件）
@@ -652,10 +652,10 @@ def main():
         _ep_cwd = _hook_input.get("cwd", "") or os.environ.get("CLAUDE_CWD", "")
         _ep_ws_id = None
         if _ep_cwd:
-            from store_workspace import _workspace_id as _ws_id_fn2
+            from memory_os.store.workspace import _workspace_id as _ws_id_fn2
             _ep_ws_id = _ws_id_fn2(_ep_cwd)
 
-        from store_episodes import (get_recent_episodes, format_episodes_for_injection,
+        from memory_os.store.episodes import (get_recent_episodes, format_episodes_for_injection,
                                      ensure_episodes_schema, mark_episode_injected)
         _ep_conn2 = open_db()
         ensure_episodes_schema(_ep_conn2)
@@ -678,9 +678,9 @@ def main():
     # 人的记忆类比：前瞻性记忆激活 — 回到熟悉地方时想起"我记得要做 X"
     try:
         if _cwd:  # _cwd 来自上方 workspace activation block
-            from store_todos import (get_pending_todos, format_todos_for_injection,
+            from memory_os.store.todos import (get_pending_todos, format_todos_for_injection,
                                       ensure_todos_schema, mark_todo_injected)
-            from store_workspace import _workspace_id as _ws_id_todo
+            from memory_os.store.workspace import _workspace_id as _ws_id_todo
             _todo_ws_id = _ws_id_todo(_cwd)
             _todo_conn2 = open_db()
             ensure_todos_schema(_todo_conn2)
@@ -804,7 +804,7 @@ def main():
 
         # 优先从 DB 读取（查最近一条 intent，同 project，按 saved_at 降序）
         try:
-            from store import open_db as _open_db2, ensure_schema as _ensure2
+            from memory_os.store.api import open_db as _open_db2, ensure_schema as _ensure2
             _ldr_conn = _open_db2()
             _ensure2(_ldr_conn)
             _intent_row = _ldr_conn.execute(
@@ -860,7 +860,7 @@ def main():
     # extractor 在其他 session 写入后广播通知，loader 在 SessionStart 消费
     # 告知用户当前 session 启动前其他 agent 积累了哪些新知识
     try:
-        from net.agent_notify import consume_pending_notifications
+        from memory_os.runtime.net.agent_notify import consume_pending_notifications
         _notifs = consume_pending_notifications(_session_id, limit=3)
         if _notifs:
             # 迭代13: 信噪比过滤 — 只注入有实质内容的跨Agent知识
@@ -931,7 +931,7 @@ def main():
         # 检测循环依赖和高风险超时，记录 WARN 级别 dmesg
         if _ict_enabled: _ict_milestones.append(("hook_analyzer", _ict_time.time()))
         try:
-            from init.hook_analyzer import HookAnalyzer
+            from memory_os.hooks.orchestration.hook_analyzer import HookAnalyzer
             _ha = HookAnalyzer()
             _ha_report = _ha.analyze()
             _ha_issues = []
@@ -1005,7 +1005,7 @@ def main():
         # OS 类比：Linux PELT (Vincent Guittot, 2012) — 更新 per-type util_avg
         if _ict_enabled: _ict_milestones.append(("pelt_update", _ict_time.time()))
         try:
-            from store_mm import pelt_update, pelt_save, pelt_load
+            from memory_os.store.mm import pelt_update, pelt_save, pelt_load
             _pelt_state = pelt_update(_log_conn, project)
             pelt_save(_pelt_state)
             _pelt_proj = _pelt_state.get(project, {})
@@ -1025,7 +1025,7 @@ def main():
         consolidation_result = {"consolidated": 0}
         if not _ts_skip("sleep_consolidation"):
             try:
-                from store_vfs import run_sleep_consolidation
+                from memory_os.store.vfs_compat import run_sleep_consolidation
                 consolidation_result = run_sleep_consolidation(_log_conn, project)
                 if consolidation_result.get("consolidated", 0) > 0:
                     _log_conn.commit()
@@ -1051,7 +1051,7 @@ def main():
         # 此处消费标志并强制执行 reclaim（绕过 deferred_initcall 的 healthy 判定）
         _softirq_pending = False
         try:
-            from store_mm import consume_softirq
+            from memory_os.store.mm import consume_softirq
             _softirq_result = consume_softirq()
             _softirq_pending = _softirq_result.get("pending", False)
             if _softirq_pending:
@@ -1166,7 +1166,7 @@ def main():
         # 必须在回收器之前运行，否则旧别名 chunks 可能被误删
         if not _ts_skip("migrate_pages"):
             try:
-                from store_mm import migrate_pages
+                from memory_os.store.mm import migrate_pages
                 mig_result = migrate_pages(_log_conn, project)
                 if mig_result["migrated"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "migrate_pages",
@@ -1184,7 +1184,7 @@ def main():
         # 在回收器之前运行：修复腐蚀数据避免影响 DAMON/kswapd 决策
         if not _ts_skip("mem_scrub"):
             try:
-                from store_mm import mem_scrub
+                from memory_os.store.mm import mem_scrub
                 scrub_result = mem_scrub(_log_conn, project)
                 if scrub_result["ce_fixed"] > 0 or scrub_result["ue_marked"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "mem_scrub",
@@ -1200,7 +1200,7 @@ def main():
         if _ict_enabled: _ict_milestones.append(("bdi_writeback", _ict_time.time()))
         if not _ts_skip("bdi_writeback"):
             try:
-                from store_mm import bdi_writeback
+                from memory_os.store.mm import bdi_writeback
                 wb_result = bdi_writeback(_log_conn, project)
                 if wb_result.get("dirty_found", 0) > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "bdi_writeback",
@@ -1217,7 +1217,7 @@ def main():
         # ── iter520：checkpoint_gc — 全局 checkpoint 垃圾回收 ──
         # OS 类比：Linux memcg hierarchy v2 memory.max — 全局上限防止 per-session 膨胀
         try:
-            from store_mm import checkpoint_gc
+            from memory_os.store.mm import checkpoint_gc
             gc_result = checkpoint_gc(_log_conn)
             if gc_result["deleted"] > 0:
                 dmesg_log(_log_conn, DMESG_INFO, "checkpoint_gc",
@@ -1249,7 +1249,7 @@ def main():
         shrink_result = {"phase1_candidates": 0, "phase2_demoted": 0, "phase3_deleted": 0}
         if not _defer_reclaim and not _ts_skip("shrink_dcache"):
             try:
-                from store_vfs import shrink_dcache
+                from memory_os.store.vfs_compat import shrink_dcache
                 shrink_result = shrink_dcache(_log_conn, project)
                 if shrink_result.get("phase2_demoted", 0) > 0 or shrink_result.get("phase3_deleted", 0) > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "shrink_dcache",
@@ -1265,7 +1265,7 @@ def main():
         # 不受 min_age_days 限制，专门处理各回收器保护条件叠加形成的"回收死区"
         if not _defer_reclaim and not _ts_skip("oom_reaper"):
             try:
-                from store_vfs import oom_reaper
+                from memory_os.store.vfs_compat import oom_reaper
                 reaper_result = oom_reaper(_log_conn, project)
                 if reaper_result.get("triggered"):
                     dmesg_log(_log_conn, DMESG_INFO, "oom_reaper",
@@ -1297,7 +1297,7 @@ def main():
         # 清理 importance < 0.2 + access_count = 0 的 zombie chunks
         if not _defer_reclaim and not _ts_skip("free_pages_ok"):
             try:
-                from store_mm import free_pages_ok
+                from memory_os.store.mm import free_pages_ok
                 fp_result = free_pages_ok(_log_conn, project)
                 if fp_result["freed"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "free_pages_ok",
@@ -1316,7 +1316,7 @@ def main():
         # free_pages_ok 只扫描当前 project，global 层 zombie 无人回收 → 全局扫描补漏
         if not _defer_reclaim and not _ts_skip("kfree_rcu"):
             try:
-                from store_mm import kfree_rcu
+                from memory_os.store.mm import kfree_rcu
                 kr_result = kfree_rcu(_log_conn)
                 if kr_result["freed"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "kfree_rcu",
@@ -1334,7 +1334,7 @@ def main():
         # 三盲区修复：UE force kill(imp=0+acc>0) + OOM_MAX reap + bitmap stale scrub
         if not _defer_reclaim and not _ts_skip("put_page"):
             try:
-                from store_mm import put_page
+                from memory_os.store.mm import put_page
                 pp_result = put_page(_log_conn, project)
                 total_pp = (pp_result["ue_killed"] + pp_result["oom_max_reaped"]
                             + pp_result["oom_max_demoted"] + pp_result["bitmap_stale_removed"])
@@ -1355,7 +1355,7 @@ def main():
         # 双向平衡：高访问+低imp → promote，高imp+零访问+超龄 → demote
         if not _defer_reclaim and not _ts_skip("numa_balancing"):
             try:
-                from store_mm import numa_balancing
+                from memory_os.store.mm import numa_balancing
                 nb_result = numa_balancing(_log_conn, project)
                 if nb_result["promoted"] > 0 or nb_result["demoted"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "numa_balancing",
@@ -1375,7 +1375,7 @@ def main():
         # 与 numa_balancing(access_count 粗粒度) 互补：fair_clock 用检索 score 连续值
         if not _defer_reclaim and not _ts_skip("fair_clock"):
             try:
-                from store_mm import fair_clock
+                from memory_os.store.mm import fair_clock
                 fc_result = fair_clock(_log_conn, project)
                 if fc_result["demoted"] > 0 or fc_result["promoted"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "fair_clock",
@@ -1397,7 +1397,7 @@ def main():
         # place_entity 提升到 min_vruntime（活跃 chunk P25 importance）公平起点
         if not _defer_reclaim and not _ts_skip("place_entity"):
             try:
-                from store_mm import place_entity
+                from memory_os.store.mm import place_entity
                 pe_result = place_entity(_log_conn, project)
                 if pe_result["placed"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "place_entity",
@@ -1417,7 +1417,7 @@ def main():
         # 映射到 [0.45, 0.95] 区间展开分布，使 importance 乘数恢复检索排序区分力
         if not _defer_reclaim and not _ts_skip("folio_referenced"):
             try:
-                from store_mm import folio_referenced
+                from memory_os.store.mm import folio_referenced
                 fr_result = folio_referenced(_log_conn, project)
                 if fr_result["spread"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "folio_referenced",
@@ -1436,7 +1436,7 @@ def main():
         # 诊断高 importance 段的"虚假驻留"并校准 importance
         if not _defer_reclaim and not _ts_skip("mincore"):
             try:
-                from store_mm import mincore
+                from memory_os.store.mm import mincore
                 mc_result = mincore(_log_conn, project)
                 if mc_result["calibrated"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "mincore",
@@ -1469,7 +1469,7 @@ def main():
         # OS 类比：Linux madvise(MADV_FREE) (Minchan Kim, 2016) — 标记页面可释放，移除 PTE mapping
         if not _defer_reclaim and not _ts_skip("madv_free"):
             try:
-                from store_mm import madv_free_scan
+                from memory_os.store.mm import madv_free_scan
                 mf_result = madv_free_scan(_log_conn)
                 if mf_result["unmapped"] > 0 or mf_result["freed"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "madv_free",
@@ -1534,7 +1534,7 @@ def main():
         # OS 类比：Linux shadow_lru_isolate() (Johannes Weiner, 2013, mm/workingset.c)
         # shadow entry 超过 active page count 时从 LRU 尾部批量回收
         try:
-            from store_mm import trim_shadow_entries
+            from memory_os.store.mm import trim_shadow_entries
             shadow_result = trim_shadow_entries(_log_conn, project)
             if shadow_result["expired"] > 0 or shadow_result["purged"] > 0 or shadow_result["scrubbed_refs"] > 0:
                 dmesg_log(_log_conn, DMESG_INFO, "gc",
@@ -1567,7 +1567,7 @@ def main():
         # mlock 保护的 chunk 若连续 N 轮 idle 且 access=0，说明从未被实战验证，撤销保护
         if not _defer_reclaim and not _ts_skip("munlock_idle"):
             try:
-                from store_mm import munlock_idle
+                from memory_os.store.mm import munlock_idle
                 munlock_result = munlock_idle(_log_conn, project)
                 if munlock_result["unlocked"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "munlock_idle",
@@ -1584,7 +1584,7 @@ def main():
         # 定向降级为 OOM_ADJ_PREFER(300)，允许正常回收路径处理
         if not _defer_reclaim and not _ts_skip("oom_reaper_onfault"):
             try:
-                from store_mm import oom_reaper_onfault
+                from memory_os.store.mm import oom_reaper_onfault
                 reaper_result = oom_reaper_onfault(_log_conn, project)
                 if reaper_result["reaped"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "oom_reaper_onfault",
@@ -1600,7 +1600,7 @@ def main():
         # 召回率超 50% 的垄断 chunk 从 FTS5 物理移除，cooldown 后自动恢复
         if not _defer_reclaim and not _ts_skip("cpuset_quarantine"):
             try:
-                from store_mm import cpuset_quarantine
+                from memory_os.store.mm import cpuset_quarantine
                 cpuset_result = cpuset_quarantine(_log_conn, project)
                 if cpuset_result["quarantined"] or cpuset_result["released"]:
                     dmesg_log(_log_conn, DMESG_INFO, "cpuset",
@@ -1617,7 +1617,7 @@ def main():
         # dark pages（从未出现在 top_k）降级 oom_adj 为新知识让路
         if not _defer_reclaim and not _ts_skip("vmstat_scan"):
             try:
-                from store_mm import vmstat_scan
+                from memory_os.store.mm import vmstat_scan
                 vmstat_result = vmstat_scan(_log_conn, project)
                 if vmstat_result["dark_pages_demoted"] > 0 or vmstat_result["pgscan"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "vmstat",
@@ -1636,7 +1636,7 @@ def main():
         slab_result = {"freeable": 0, "reclaimed": 0, "skipped_grace": 0}
         if not _defer_reclaim and not _ts_skip("shrink_slab"):
             try:
-                from store_mm import shrink_slab
+                from memory_os.store.mm import shrink_slab
                 slab_result = shrink_slab(_log_conn, project)
                 if slab_result["reclaimed"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "shrink_slab",
@@ -1656,9 +1656,9 @@ def main():
         fstrim_result = {"total_trimmed": 0, "trimmed": {}}
         if not _defer_reclaim and not _ts_skip("fstrim"):
             try:
-                from config import get as _cfg547
+                from memory_os.config.sysctl import get as _cfg547
                 if _cfg547("fstrim.enabled"):
-                    from store_mm import fstrim
+                    from memory_os.store.mm import fstrim
                     fstrim_result = fstrim(_log_conn)
                     if fstrim_result["total_trimmed"] > 0:
                         parts = [f"{k}={v}" for k, v in fstrim_result["trimmed"].items() if v > 0]
@@ -1678,9 +1678,9 @@ def main():
         logrotate_result = {"total_rotated": 0, "rotated": {}}
         if not _defer_reclaim and not _ts_skip("logrotate"):
             try:
-                from config import get as _cfg548
+                from memory_os.config.sysctl import get as _cfg548
                 if _cfg548("logrotate.enabled"):
-                    from store_mm import logrotate
+                    from memory_os.store.mm import logrotate
                     logrotate_result = logrotate(_log_conn)
                     if logrotate_result["total_rotated"] > 0:
                         parts = [f"{k}={v}" for k, v in logrotate_result["rotated"].items() if v > 0]
@@ -1699,9 +1699,9 @@ def main():
         # 清理 memory-os 目录下过期的 per-session 状态文件碎片
         if not _defer_reclaim and not _ts_skip("tmpfiles_d"):
             try:
-                from config import get as _cfg585
+                from memory_os.config.sysctl import get as _cfg585
                 if _cfg585("tmpfiles_d.enabled"):
-                    from store_mm import tmpfiles_d
+                    from memory_os.store.mm import tmpfiles_d
                     _tmpfiles_result = tmpfiles_d()
                     if _tmpfiles_result["total_cleaned"] > 0:
                         _parts = [f"{k}={v}" for k, v in _tmpfiles_result["cleaned"].items() if v > 0]
@@ -1721,9 +1721,9 @@ def main():
         # 主动扫描退化 chunks + 完全重复 chunks → 删除重复 / 降级退化
         if not _defer_reclaim and not _ts_skip("proactive_compaction"):
             try:
-                from config import get as _cfg586
+                from memory_os.config.sysctl import get as _cfg586
                 if _cfg586("proactive_compaction.enabled"):
-                    from store_mm import proactive_compaction
+                    from memory_os.store.mm import proactive_compaction
                     _compact_result = proactive_compaction(_log_conn)
                     if _compact_result.get("triggered"):
                         dmesg_log(_log_conn, DMESG_INFO, "proactive_compaction",
@@ -1744,9 +1744,9 @@ def main():
         prune_result = {"total_pruned": 0}
         if not _defer_reclaim and not _ts_skip("prune_icache_sb"):
             try:
-                from config import get as _cfg563
+                from memory_os.config.sysctl import get as _cfg563
                 if _cfg563("prune_icache_sb.enabled"):
-                    from store_mm import prune_icache_sb
+                    from memory_os.store.mm import prune_icache_sb
                     prune_result = prune_icache_sb(_log_conn, project)
                     if prune_result["total_pruned"] > 0:
                         parts = []
@@ -1774,7 +1774,7 @@ def main():
         _oom_rb_result = {"adjusted": 0}
         if not _defer_reclaim and not _ts_skip("oom_rebalance"):
             try:
-                from store_mm import oom_score_adj_rebalance
+                from memory_os.store.mm import oom_score_adj_rebalance
                 _oom_rb_result = oom_score_adj_rebalance(_log_conn, project)
                 if _oom_rb_result["adjusted"] > 0:
                     parts = []
@@ -1802,7 +1802,7 @@ def main():
         _shrink_result = {"deleted": 0}
         if not _defer_reclaim and not _ts_skip("shrink_dcache_sb"):
             try:
-                from store_mm import shrink_dcache_sb
+                from memory_os.store.mm import shrink_dcache_sb
                 _shrink_result = shrink_dcache_sb(_log_conn, project)
                 if _shrink_result["deleted"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "shrink_dcache_sb",
@@ -1821,7 +1821,7 @@ def main():
         _kcompactd_result = {"deleted": 0}
         if not _defer_reclaim and not _ts_skip("kcompactd"):
             try:
-                from store_mm import kcompactd
+                from memory_os.store.mm import kcompactd
                 _kcompactd_result = kcompactd(_log_conn, project)
                 if _kcompactd_result["deleted"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "kcompactd",
@@ -1843,7 +1843,7 @@ def main():
         _fbd_result = {"drained": 0}
         if not _defer_reclaim and not _ts_skip("folio_batch_drain"):
             try:
-                from store_mm import folio_batch_drain
+                from memory_os.store.mm import folio_batch_drain
                 _fbd_result = folio_batch_drain(_log_conn, project)
                 if _fbd_result["drained"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "folio_batch_drain",
@@ -1864,7 +1864,7 @@ def main():
         # 无 entity_map 的 chunk 对 spreading_activate 不可见（57% dark page rate）
         if not _defer_reclaim and not _ts_skip("anon_vma_prepare"):
             try:
-                from store_mm import anon_vma_prepare
+                from memory_os.store.mm import anon_vma_prepare
                 _avp_result = anon_vma_prepare(_log_conn, project)
                 if _avp_result["backfilled"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "anon_vma_prepare",
@@ -1883,7 +1883,7 @@ def main():
         # 映射的目标实体建立 PTE，修复 spreading_activate 72.8% 死路
         if not _defer_reclaim and not _ts_skip("populate_pte"):
             try:
-                from store_mm import populate_pte
+                from memory_os.store.mm import populate_pte
                 _pte_result = populate_pte(_log_conn, project)
                 if _pte_result["populated"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "populate_pte",
@@ -1904,7 +1904,7 @@ def main():
         _uav_result = {"pruned": 0}
         if not _defer_reclaim and not _ts_skip("unlink_anon_vmas"):
             try:
-                from store_mm import unlink_anon_vmas
+                from memory_os.store.mm import unlink_anon_vmas
                 _uav_result = unlink_anon_vmas(_log_conn, project)
                 if _uav_result["pruned"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "unlink_anon_vmas",
@@ -1927,7 +1927,7 @@ def main():
         _ftlb_result = {"flushed": 0}
         if not _defer_reclaim and not _ts_skip("flush_tlb_one"):
             try:
-                from store_mm import flush_tlb_one
+                from memory_os.store.mm import flush_tlb_one
                 _ftlb_result = flush_tlb_one(_log_conn, project)
                 if _ftlb_result["flushed"] > 0:
                     dmesg_log(_log_conn, DMESG_INFO, "flush_tlb_one",
@@ -1950,9 +1950,9 @@ def main():
         vacuum_result = {"vacuumed": False, "freed_kb": 0}
         if not _defer_reclaim and not _ts_skip("vacuum"):
             try:
-                from config import get as _cfg549
+                from memory_os.config.sysctl import get as _cfg549
                 if _cfg549("vacuum.enabled"):
-                    from store_mm import vacuum
+                    from memory_os.store.mm import vacuum
                     vacuum_result = vacuum(str(STORE_DB))
                     if vacuum_result["vacuumed"]:
                         dmesg_log(_log_conn, DMESG_INFO, "vacuum",
@@ -1972,9 +1972,9 @@ def main():
         release_task_result = {"total_cleaned": 0, "phases": {}}
         if not _defer_reclaim and not _ts_skip("release_task"):
             try:
-                from config import get as _cfg550
+                from memory_os.config.sysctl import get as _cfg550
                 if _cfg550("release_task.enabled"):
-                    from store_mm import release_task
+                    from memory_os.store.mm import release_task
                     release_task_result = release_task(_log_conn, project)
                     if release_task_result["total_cleaned"] > 0:
                         _ph = release_task_result["phases"]
@@ -2018,7 +2018,7 @@ def main():
         # 在 swap_gc 之后执行（先清理孤儿，再恢复有价值的 chunk）
         sr_result = {"recovered": 0, "boosted": 0}
         try:
-            from store_swap import run_spontaneous_recovery
+            from memory_os.store.swap import run_spontaneous_recovery
             sr_result = run_spontaneous_recovery(_log_conn, project)
             if sr_result.get("recovered", 0) > 0:
                 dmesg_log(_log_conn, DMESG_INFO, "swap",
@@ -2032,7 +2032,7 @@ def main():
         if _ict_enabled: _ict_milestones.append(("_boot_end", _ict_time.time()))
         _ict_blame = ""
         try:
-            from store_mm import initcall_debug as _icd_analyze
+            from memory_os.store.mm import initcall_debug as _icd_analyze
             # 从 milestones 计算 per-subsystem timings:
             # [(name, elapsed_ms, True)] — milestone[i+1].time - milestone[i].time
             _ict_timings = []
@@ -2240,7 +2240,7 @@ def main():
     try:
         _ipc_conn = open_db()
         ensure_schema(_ipc_conn)
-        from store_vfs import ipc_recv, ipc_cleanup_expired
+        from memory_os.store.vfs_compat import ipc_recv, ipc_cleanup_expired
         # 清理过期消息
         expired = ipc_cleanup_expired(_ipc_conn)
         # 消费待处理的知识更新通知

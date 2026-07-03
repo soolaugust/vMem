@@ -25,7 +25,7 @@ os.environ["MEMORY_OS_DB"] = os.path.join(_tmpdir, "store.db")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "hooks"))
 
-from store import (
+from memory_os.store.api import (
     open_db, ensure_schema, insert_chunk, update_accessed,
     delete_chunks, bump_chunk_version, read_chunk_version,
     CHUNK_VERSION_FILE,

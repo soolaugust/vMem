@@ -23,15 +23,15 @@ OS 类比：Linux unlink_anon_vmas() (Andrea Arcangeli, 2004, mm/rmap.c)
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: E402 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402 — 测试隔离
 
 import sqlite3
 import time
 import pytest
 from datetime import datetime, timezone
-from store_core import open_db, ensure_schema, insert_chunk, MEMORY_OS_DIR
-from store_mm import unlink_anon_vmas
-from config import get as sysctl
+from memory_os.store.core import open_db, ensure_schema, insert_chunk, MEMORY_OS_DIR
+from memory_os.store.mm import unlink_anon_vmas
+from memory_os.config.sysctl import get as sysctl
 
 
 def _setup():
@@ -127,7 +127,7 @@ def test_disabled():
     conn = _setup()
     _make_edge(conn, "edge1", "orphan_a", "orphan_b")
     # 临时覆盖配置
-    import config
+    import memory_os.config.sysctl as config
     orig = config._REGISTRY["unlink_anon_vmas.enabled"]
     config._REGISTRY["unlink_anon_vmas.enabled"] = (False, bool, None, None, None, "")
     try:
@@ -162,7 +162,7 @@ def test_prune_half_dangling_off():
     # half dangling
     _make_edge(conn, "edge2", "alive_entity", "dead_c")
 
-    import config
+    import memory_os.config.sysctl as config
     orig = config._REGISTRY["unlink_anon_vmas.prune_half_dangling"]
     config._REGISTRY["unlink_anon_vmas.prune_half_dangling"] = (False, bool, None, None, None, "")
     try:

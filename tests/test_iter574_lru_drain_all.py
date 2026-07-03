@@ -21,17 +21,17 @@ OS 类比：Linux lru_add_drain_all() (Andrew Morton, 2005, mm/swap.c)
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: E402 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402 — 测试隔离
 
 import sqlite3
 import json
 import time
 import pytest
 from datetime import datetime, timezone
-from store_core import open_db, ensure_schema, insert_chunk, MEMORY_OS_DIR
-from store_mm import (folio_batch_drain, page_idle_mark, page_idle_clear,
+from memory_os.store.core import open_db, ensure_schema, insert_chunk, MEMORY_OS_DIR
+from memory_os.store.mm import (folio_batch_drain, page_idle_mark, page_idle_clear,
                       _page_idle_save, _page_idle_load, _PAGE_IDLE_FILE)
-from config import get as sysctl
+from memory_os.config.sysctl import get as sysctl
 
 
 def _make_chunk(conn, summary, project="test_proj", chunk_type="decision",

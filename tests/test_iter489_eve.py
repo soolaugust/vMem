@@ -15,9 +15,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
-from store_vfs import ensure_schema, apply_encoding_variability_eve as apply_encoding_variability
-import config
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
+from memory_os.store.vfs_compat import ensure_schema, apply_encoding_variability_eve as apply_encoding_variability
+import memory_os.config.sysctl as config
 
 
 @pytest.fixture

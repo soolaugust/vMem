@@ -22,7 +22,7 @@ _ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(_ROOT))
 os.chdir(str(_ROOT))
 
-from store_core import open_db, ensure_schema, insert_chunk
+from memory_os.store.core import open_db, ensure_schema, insert_chunk
 from hooks.retriever import _predict_intent, _intent_prefetch
 from hooks.writer import _detect_and_persist_goal, _process_negative_feedback
 
@@ -77,7 +77,7 @@ def test_feedback_loop():
     test_id = f"test-feedback-{uuid.uuid4().hex[:8]}"
     now = datetime.now(timezone.utc).isoformat()
     original_imp = 0.5
-    from store_core import insert_chunk
+    from memory_os.store.core import insert_chunk
     insert_chunk(conn, {
         "id": test_id, "created_at": now, "updated_at": now,
         "project": PROJECT, "source_session": "test",
@@ -110,14 +110,14 @@ def test_feedback_loop():
 
 # ── 3. 跨项目全局层 ────────────────────────────────────────────────────────────
 def test_global_layer():
-    from store_core import get_chunks
+    from memory_os.store.core import get_chunks
     conn = open_db()
     ensure_schema(conn)
 
     gid = f"test-global-{uuid.uuid4().hex[:8]}"
     now = datetime.now(timezone.utc).isoformat()
     summary = f"全局共享测试知识 eval {gid[:8]}"
-    from store_core import insert_chunk
+    from memory_os.store.core import insert_chunk
     insert_chunk(conn, {
         "id": gid, "created_at": now, "updated_at": now,
         "project": "global", "source_session": "test",

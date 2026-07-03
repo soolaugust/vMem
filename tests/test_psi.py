@@ -35,9 +35,9 @@ _ROOT = Path(__file__).parent
 sys.path.insert(0, str(_ROOT))
 
 import sqlite3
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
-from store import open_db, ensure_schema, insert_chunk, insert_trace, psi_stats, proc_stats, get_project_chunk_count
-from config import get as _cfg, _REGISTRY
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+from memory_os.store.api import open_db, ensure_schema, insert_chunk, insert_trace, psi_stats, proc_stats, get_project_chunk_count
+from memory_os.config.sysctl import get as _cfg, _REGISTRY
 
 TEST_PROJECT = "test_psi_project"
 PASSED = 0
@@ -192,7 +192,7 @@ if __name__ == "__main__":
     print("\nT7: Retrieval FULL (>70% latency stalls, adaptive off)")
     conn = _make_db()
     # 临时用环境变量禁用 adaptive
-    import config as _config_mod
+    import memory_os.config.sysctl as _config_mod
     _orig_adaptive = _config_mod._REGISTRY.get("psi.adaptive_baseline")
     _config_mod._REGISTRY["psi.adaptive_baseline"] = (0, int, 0, 1, None, "disabled for test")
     _config_mod._disk_config = None  # 清缓存

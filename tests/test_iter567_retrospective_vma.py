@@ -14,10 +14,10 @@ from datetime import datetime, timezone, timedelta
 
 # ── tmpfs 测试隔离 ──
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: F401 — import 即自动 mount tmpfs
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — import 即自动 mount tmpfs
 
-from store_mm import oom_score_adj_rebalance, _retrospective_vma_validate
-from store_vfs import open_db, ensure_schema
+from memory_os.store.mm import oom_score_adj_rebalance, _retrospective_vma_validate
+from memory_os.store.vfs_compat import open_db, ensure_schema
 
 
 def _make_chunk(conn, summary, chunk_type="decision", importance=0.80,
@@ -207,7 +207,7 @@ def test_r4_disabled_via_sysctl():
     ensure_schema(conn)
     cid = _make_chunk(conn, "| 碎片 | 禁用测试 |", age_days=3.0)
     # 设置极大 age 门槛使 R4 不触发
-    from config import sysctl_set
+    from memory_os.config.sysctl import sysctl_set
     sysctl_set("oom_rebalance.r4_min_age_days", 999.0)
     result = oom_score_adj_rebalance(conn, "test_proj")
     assert _get_oom(conn, cid) == 0  # 年龄不足 999d，不触发

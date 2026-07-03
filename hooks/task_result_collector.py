@@ -133,8 +133,8 @@ def main():
             sys.exit(0)
 
         # ── 写入 store.db ────────────────────────────────────────────
-        from store_vfs import open_db, ensure_schema, insert_chunk, ipc_send
-        from utils import resolve_project_id
+        from memory_os.store.vfs_compat import open_db, ensure_schema, insert_chunk, ipc_send
+        from memory_os.core.utils import resolve_project_id
 
         project_id = resolve_project_id(cwd or str(Path.cwd()))
         conn = open_db(STORE_DB)

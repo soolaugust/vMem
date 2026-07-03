@@ -12,13 +12,13 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent))
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
-from store import (
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+from memory_os.store.api import (
     open_db, ensure_schema, insert_chunk, checkpoint_dump,
     checkpoint_restore, checkpoint_collect_hits, _ensure_checkpoint_schema,
     _checkpoint_cleanup,
 )
-from config import get as _sysctl
+from memory_os.config.sysctl import get as _sysctl
 
 PASS = 0
 FAIL = 0

@@ -31,7 +31,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("MEMORY_OS_STORE", ":memory:")
 
-from store_mm import mmap_populate
+from memory_os.store.mm import mmap_populate
 
 
 # ── fixtures ───────────────────────────────────────────────────
@@ -193,7 +193,7 @@ def test_disabled():
     conn.commit()
 
     # Monkey-patch config
-    import config
+    import memory_os.config.sysctl as config
     original = config._REGISTRY.get("mmap_populate.enabled")
     config._REGISTRY["mmap_populate.enabled"] = (False, bool, None, None, None, "")
     try:

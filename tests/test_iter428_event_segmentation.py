@@ -34,8 +34,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
-from store_vfs import ensure_schema, run_sleep_consolidation, compute_boundary_proximity
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
+from memory_os.store.vfs_compat import ensure_schema, run_sleep_consolidation, compute_boundary_proximity
 
 
 @pytest.fixture
@@ -212,7 +212,7 @@ def test_es2_doorway_chunk_gets_penalty(conn):
 
 def test_es3_neutral_chunk_standard_consolidation(conn):
     """ES3: boundary_proximity = 0 的 chunk 应用标准 boost_factor，无分叉。"""
-    import config as _config
+    import memory_os.config.sysctl as _config
     boost_factor = _config.get("consolidation.boost_factor")
 
     _insert_chunk(conn, "neutral_chunk", stability=1.5, boundary_proximity=0.0,
@@ -232,7 +232,7 @@ def test_es3_neutral_chunk_standard_consolidation(conn):
 def test_es9_boundary_disabled_no_bifurcation(conn):
     """ES9: consolidation.boundary_enabled=False 时，boundary chunk 只应用标准 boost_factor。"""
     import unittest.mock as mock
-    import config as _config
+    import memory_os.config.sysctl as _config
 
     original_get = _config.get
     def patched_get(key, project=None):

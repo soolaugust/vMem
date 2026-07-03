@@ -32,7 +32,7 @@ def run_tests():
     t0 = time.time()
 
     # ── 1. 基本注册表读取（默认值）──
-    import config
+    import memory_os.config.sysctl as config
     # 清除可能存在的环境变量覆盖
     for key in list(os.environ.keys()):
         if key.startswith("MEMORY_OS_"):
@@ -130,7 +130,7 @@ def run_tests():
         _assert_test("未知 key 抛 KeyError", True)
 
     # ── 7. scorer.py 集成验证 ──
-    from scorer import importance_with_decay, access_bonus
+    from memory_os.core.scorer import importance_with_decay, access_bonus
     from datetime import datetime, timezone
 
     now_iso = datetime.now(timezone.utc).isoformat()

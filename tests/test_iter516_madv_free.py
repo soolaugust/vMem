@@ -4,14 +4,14 @@ test_iter516_madv_free.py — MADV_FREE: Lazy Page Reclaim + FTS5 Exclusion
 
 OS 类比：Linux madvise(MADV_FREE) (Minchan Kim, 2016)
 """
-import tmpfs  # noqa: F401 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 测试隔离
 import os, sys, pytest
 from datetime import datetime, timezone, timedelta
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from store_vfs import open_db, ensure_schema
-from store_mm import madv_free_scan
+from memory_os.store.vfs_compat import open_db, ensure_schema
+from memory_os.store.mm import madv_free_scan
 
 _conn = None
 

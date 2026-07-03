@@ -25,14 +25,14 @@ import time
 sys.path.insert(0, os.path.dirname(__file__))
 os.environ.setdefault("CLAUDE_CWD", str(__import__("pathlib").Path(__file__).parent.parent.parent.parent.parent))
 
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
-from store import (
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+from memory_os.store.api import (
     open_db, ensure_schema, insert_chunk, get_chunks, get_chunk_count,
     swap_out, swap_in, swap_fault, get_swap_count, proc_stats,
     evict_lowest_retention, kswapd_scan, delete_chunks,
 )
-from config import get as sysctl_get
-from schema import MemoryChunk
+from memory_os.config.sysctl import get as sysctl_get
+from memory_os.core.schema import MemoryChunk
 
 _TEST_PROJECT = "test_swap_project"
 _PASS = 0
@@ -162,7 +162,7 @@ def test_swap_capacity_control():
 
     # 设置环境变量临时降低 max_chunks（min=10，所以设 12 来测试）
     os.environ["MEMORY_OS_SWAP_MAX_CHUNKS"] = "12"
-    from config import _invalidate_cache
+    from memory_os.config.sysctl import _invalidate_cache
     _invalidate_cache()
 
     chunks = []

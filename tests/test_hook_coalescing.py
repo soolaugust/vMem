@@ -26,6 +26,17 @@ def load_settings():
         return json.load(f)
 
 
+def memory_os_hook_entries(cfg, event_type):
+    entries = cfg["hooks"].get(event_type, [])
+    selected = []
+    for entry in entries:
+        hooks = entry.get("hooks", [])
+        commands = "\n".join(hook.get("command", "") for hook in hooks)
+        if "/aios/memory-os/" in commands:
+            selected.append(entry)
+    return selected
+
+
 def test_settings_valid_json():
     """settings.json must be valid JSON."""
     cfg = load_settings()
@@ -36,19 +47,19 @@ def test_settings_valid_json():
 
 
 def test_pretooluse_count():
-    """PreToolUse hooks should be <= 5 (was 9)."""
+    """memory-os PreToolUse hooks should stay coalesced despite unrelated global hooks."""
     cfg = load_settings()
-    count = len(cfg["hooks"]["PreToolUse"])
-    assert count <= 6, f"PreToolUse has {count} hooks, expected <= 6"
-    print(f"  ✓ PreToolUse hooks: {count} (was 9)")
+    count = len(memory_os_hook_entries(cfg, "PreToolUse"))
+    assert count <= 3, f"memory-os PreToolUse has {count} hooks, expected <= 3"
+    print(f"  ✓ memory-os PreToolUse hooks: {count} (coalesced)")
 
 
 def test_total_hooks_reduced():
-    """Total hooks should be < 42 (was 45)."""
+    """memory-os-owned hooks should stay reduced; unrelated harness hooks are out of scope."""
     cfg = load_settings()
-    total = sum(len(v) for v in cfg["hooks"].values())
-    assert total < 42, f"Total hooks {total}, expected < 42"
-    print(f"  ✓ Total hooks: {total} (was 45)")
+    total = sum(len(memory_os_hook_entries(cfg, event_type)) for event_type in cfg["hooks"])
+    assert total < 20, f"memory-os hook entries {total}, expected < 20"
+    print(f"  ✓ memory-os hook entries: {total} (coalesced)")
 
 
 def test_monitor_update_removed():

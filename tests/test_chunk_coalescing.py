@@ -31,7 +31,7 @@ def tmpdb(tmp_path):
 
 @pytest.fixture()
 def conn(tmpdb):
-    from store_vfs import open_db, ensure_schema
+    from memory_os.store.vfs_compat import open_db, ensure_schema
     c = open_db(tmpdb)
     ensure_schema(c)
     yield c
@@ -55,7 +55,7 @@ def _insert(conn, chunk_id, summary, importance=0.5, chunk_type="conversation_su
 
 def test_cc1_coalesce_three_small_chunks(conn):
     """3 个同主题小 chunk → 合并为 1，其余 2 个删除"""
-    from store_vfs import coalesce_small_chunks
+    from memory_os.store.vfs_compat import coalesce_small_chunks
     _insert(conn, "c1", "端口配置讨论了3000", importance=0.5)
     _insert(conn, "c2", "端口配置询问了端口", importance=0.4)
     _insert(conn, "c3", "端口配置确认了端口", importance=0.6)
@@ -74,7 +74,7 @@ def test_cc1_coalesce_three_small_chunks(conn):
 
 def test_cc2_less_than_min_group_no_coalesce(conn):
     """只有 2 个同主题 chunk（< min_group=3）→ 不合并"""
-    from store_vfs import coalesce_small_chunks
+    from memory_os.store.vfs_compat import coalesce_small_chunks
     _insert(conn, "d1", "缓存策略用了Redis", importance=0.5)
     _insert(conn, "d2", "缓存策略选择了LRU", importance=0.5)
 
@@ -92,7 +92,7 @@ def test_cc2_less_than_min_group_no_coalesce(conn):
 
 def test_cc3_long_summary_excluded(conn):
     """summary > max_summary_len 的 chunk 不被合并"""
-    from store_vfs import coalesce_small_chunks
+    from memory_os.store.vfs_compat import coalesce_small_chunks
     long_summary = "A" * 80  # > 60
     _insert(conn, "e1", long_summary, importance=0.5)
     _insert(conn, "e2", long_summary + "B", importance=0.5)
@@ -114,7 +114,7 @@ def test_cc3_long_summary_excluded(conn):
 
 def test_cc4_anchor_highest_importance(conn):
     """合并后 anchor 的 importance = max 值"""
-    from store_vfs import coalesce_small_chunks
+    from memory_os.store.vfs_compat import coalesce_small_chunks
     _insert(conn, "f1", "数据库设计用了 SQLite", importance=0.5)
     _insert(conn, "f2", "数据库设计选了轻量", importance=0.9)  # 最高 importance
     _insert(conn, "f3", "数据库设计确认方案", importance=0.3)
@@ -132,7 +132,7 @@ def test_cc4_anchor_highest_importance(conn):
 
 def test_cc5_composite_content_has_all_summaries(conn):
     """合并后的 content 包含所有原始 summary"""
-    from store_vfs import coalesce_small_chunks
+    from memory_os.store.vfs_compat import coalesce_small_chunks
     s1 = "API设计用了REST风格"
     s2 = "API设计采用JSON格式"
     s3 = "API设计确认了版本"

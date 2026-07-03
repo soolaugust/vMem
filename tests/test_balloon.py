@@ -12,12 +12,12 @@ from datetime import datetime, timezone, timedelta
 _ROOT = Path(__file__).parent
 sys.path.insert(0, str(_ROOT))
 
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
-from store import (
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+from memory_os.store.api import (
     open_db, ensure_schema, get_project_chunk_count,
     balloon_quota, kswapd_scan, cgroup_throttle_check,
 )
-from config import get as _cfg
+from memory_os.config.sysctl import get as _cfg
 
 PASSED = 0
 FAILED = 0

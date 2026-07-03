@@ -14,7 +14,7 @@ test_vfs_adapter.py — Gap 3: VFS 外部适配器注册中心测试
 9. 注册失败（非 VFSBackend 实例）抛出 TypeError
 10. 并发注册/注销不引起竞态
 """
-import tmpfs  # noqa: F401 — must be first to isolate test DB
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — must be first to isolate test DB
 
 import sys
 import unittest
@@ -24,12 +24,12 @@ from typing import List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from vfs_core import (
+from memory_os.vfs.core import (
     VFSBackend, VFSItem, VFSMetadata,
     VFSItemType, VFSSource, VFSScope,
 )
-from vfs_adapter_registry import VFSAdapterRegistry
-from vfs import KnowledgeVFS
+from memory_os.vfs.adapter_registry import VFSAdapterRegistry
+from memory_os.vfs.api import KnowledgeVFS
 
 
 # ── Mock Backend（测试用）──────────────────────────────────────────────────────

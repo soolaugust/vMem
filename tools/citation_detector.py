@@ -42,8 +42,8 @@ from pathlib import Path
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
 
-from store import open_db, ensure_schema, dmesg_log, DMESG_INFO
-from utils import resolve_project_id
+from memory_os.store.api import open_db, ensure_schema, dmesg_log, DMESG_INFO
+from memory_os.core.utils import resolve_project_id
 
 _MEMORY_OS_DIR = Path.home() / ".claude" / "memory-os"
 
@@ -585,7 +585,7 @@ def run_citation_detection(reply_text: str, project: str,
         # OS 类比：MMU Accessed bit 置位后 kswapd 晋升 page generation（MGLRU）
         if cited_ids:
             try:
-                from store_vfs import update_accessed as _update_accessed
+                from memory_os.store.vfs_compat import update_accessed as _update_accessed
                 # _sm2_only=True: 只执行 SM-2 stability 更新，跳过 IOR/PEME/spacing 等
                 # 二次效应（避免与 citation importance 更新的语义冲突）
                 _update_accessed(conn, cited_ids, recall_quality=5, _sm2_only=True)
@@ -612,7 +612,7 @@ def run_citation_detection(reply_text: str, project: str,
         # OS 类比：DAMON dead_region → page demoted to cold tier（降代惩罚）
         if stale_degraded_ids:
             try:
-                from store_vfs import update_accessed as _update_accessed
+                from memory_os.store.vfs_compat import update_accessed as _update_accessed
                 # _sm2_only=True: 只执行 SM-2 stability 更新，跳过二次效应
                 _update_accessed(conn, list(stale_degraded_ids), recall_quality=1,
                                  _sm2_only=True)
@@ -649,7 +649,7 @@ def run_citation_detection(reply_text: str, project: str,
         # OS 类比：Linux MGLRU — 访问过但分数低的页面降半代（不是降整代）
         if _uncited_sm2_ids:
             try:
-                from store_vfs import update_accessed as _update_accessed
+                from memory_os.store.vfs_compat import update_accessed as _update_accessed
                 _update_accessed(conn, _uncited_sm2_ids, recall_quality=2, _sm2_only=True)
             except Exception:
                 pass

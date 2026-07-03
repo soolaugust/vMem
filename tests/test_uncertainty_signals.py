@@ -36,7 +36,7 @@ def tmpdb(tmp_path):
 
 @pytest.fixture()
 def conn(tmpdb):
-    from store_vfs import open_db, ensure_schema
+    from memory_os.store.vfs_compat import open_db, ensure_schema
     c = open_db(tmpdb)
     ensure_schema(c)
     yield c
@@ -100,7 +100,7 @@ def test_us5_max_signals():
 
 def test_us6_write_uncertainty_chunks_searchable(conn):
     from hooks.extractor import _extract_uncertainty_signals, _write_uncertainty_chunks
-    from store_vfs import fts_search
+    from memory_os.store.vfs_compat import fts_search
     signals = [("API 参数格式", "low")]
     count = _write_uncertainty_chunks(conn, signals, "proj", "sess1")
     conn.commit()

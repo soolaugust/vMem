@@ -33,7 +33,7 @@ def _run_prompt_guard(memory_dir: Path, transcript: Path) -> dict:
     return json.loads(result.stdout)
 
 
-def test_hard_context_overflow_sheds_retriever_without_blocking(tmp_path: Path) -> None:
+def test_hard_context_overflow_enters_working_set_and_sheds_retriever(tmp_path: Path) -> None:
     memory_dir = tmp_path / "memory-os"
     memory_dir.mkdir()
     transcript = tmp_path / "transcript.jsonl"
@@ -44,9 +44,15 @@ def test_hard_context_overflow_sheds_retriever_without_blocking(tmp_path: Path) 
 
     payload = _run_prompt_guard(memory_dir, transcript)
     assert payload["decision"] == "approve"
-    assert "critical pressure" in payload["reason"]
+    assert "working-set" in payload["reason"]
+    assert "hookSpecificOutput" in payload
+    assert len(payload["hookSpecificOutput"]["additionalContext"]) <= 1200
     pressure = json.loads((memory_dir / "context_pressure_state.json").read_text(encoding="utf-8"))
     assert pressure["last_pressure_level"] == "critical"
+    mode = json.loads((memory_dir / "context_mode_state.json").read_text(encoding="utf-8"))
+    assert mode["mode"] == "working_set"
+    working_set = memory_dir / "working_set" / "current.json"
+    assert working_set.exists()
 
     env = os.environ.copy()
     env["MEMORY_OS_DIR"] = str(memory_dir)

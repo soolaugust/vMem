@@ -25,10 +25,10 @@ import uuid
 
 # tmpfs 隔离
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-import tmpfs  # noqa: F401 — 必须在 store import 之前
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 必须在 store import 之前
 
-from store_mm import gc_traces, rmap_sweep, readahead_pairs
-from store_vfs import open_db, ensure_schema
+from memory_os.store.mm import gc_traces, rmap_sweep, readahead_pairs
+from memory_os.store.vfs_compat import open_db, ensure_schema
 
 # 每次测试使用唯一 project，避免数据泄漏
 _test_counter = 0

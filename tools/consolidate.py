@@ -37,8 +37,8 @@ from datetime import datetime, timezone
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
 
-from store import open_db, ensure_schema
-from utils import resolve_project_id
+from memory_os.store.api import open_db, ensure_schema
+from memory_os.core.utils import resolve_project_id
 
 
 def _jaccard_similarity(a: str, b: str) -> float:
@@ -58,6 +58,38 @@ def _jaccard_similarity(a: str, b: str) -> float:
     if not ta or not tb:
         return 0.0
     return len(ta & tb) / len(ta | tb)
+
+
+def _llm_umbrella(survivor_summary: str, survivor_content: str,
+                  ghost_summary: str) -> str | None:
+    """
+    LLM umbrella 重写（借鉴 komi-learn ConsolidateLLM）：把一簇语义重叠的记忆
+    合并为一条更丰富的整合表述，而非简单字符串拼接。
+
+    与字符串拼接的区别：LLM 整合多角度表述，去重叠、补结构，输出更完整而非更短。
+
+    Returns:
+        umbrella content 文本，或 None（无 LLM / 调用失败 / 输出不可用），调用方回退拼接。
+    """
+    try:
+        from memory_os.core.llm_client import llm_complete
+    except Exception:
+        return None
+    system = (
+        "你是知识巩固助手。下面是关于同一主题的多条记忆，请将它们合并为一条 umbrella 记忆。"
+        "要求：保留所有关键事实、决策、约束、原因；整合不同角度的表述、去除重复；"
+        "输出应比任一单条更完整，不得丢失信息，不得编造。只输出合并后的正文，不要解释或加标题。"
+    )
+    prompt = (
+        f"主记忆 summary：{survivor_summary}\n"
+        f"主记忆 content：{survivor_content[:1500]}\n\n"
+        f"待合并记忆 summary：{ghost_summary}\n\n"
+        f"请输出合并后的 umbrella 正文："
+    )
+    out = llm_complete(prompt, system=system, max_tokens=1024)
+    if not out or len(out.strip()) < 10:
+        return None
+    return out.strip()
 
 
 def consolidate_project(conn: sqlite3.Connection, project: str,
@@ -123,11 +155,35 @@ def consolidate_project(conn: sqlite3.Connection, project: str,
             print(f"    ghost:    {ghost_summary[:60]}")
 
             if not dry_run:
-                # 1. 合并内容到 survivor
+                # 1. 合并内容到 survivor —— 字符串拼接回退基线
                 if ghost_summary not in survivor_content:
                     new_content = (survivor_content + "\n[merged] " + ghost_summary).strip()[:3000]
                 else:
                     new_content = survivor_content
+
+                # 1b. 可选 LLM umbrella 重写（借鉴 komi-learn）：整合为更丰富的一条。
+                #     安全闭环：LLM 输出必过 scrub_secrets + detect_identifiers，
+                #     任一命中即放弃 umbrella，退回上面的字符串拼接。
+                _umbrella_enabled = False
+                try:
+                    import memory_os.config.sysctl as _cfg
+                    _umbrella_enabled = bool(_cfg.get("consolidation.llm_umbrella.enabled"))
+                except Exception:
+                    _umbrella_enabled = False
+                if _umbrella_enabled:
+                    _um = _llm_umbrella(survivor_summary, survivor_content, ghost_summary)
+                    if _um:
+                        try:
+                            from memory_os.core.privacy_filter import scrub_secrets, detect_identifiers
+                            _um_scrubbed, _ = scrub_secrets(_um)
+                            if not detect_identifiers(_um_scrubbed):
+                                new_content = _um_scrubbed[:3000]
+                                print(f"    [umbrella] LLM 重写 {len(_um_scrubbed)} chars")
+                            else:
+                                print(f"    [umbrella] 拒绝（含标识符），回退拼接")
+                        except Exception:
+                            pass  # 安全过滤异常 → 保守用拼接
+
                 new_stab = min(365.0, max(survivor_stab, stab_b) * 1.2)
 
                 conn.execute("""
@@ -195,7 +251,7 @@ def main():
     # 修复：在 consolidate.py（sleeping hook 的入口）末尾调用 sleep_consolidate + episodic_decay_scan。
     if not args.dry_run:
         try:
-            from store_vfs import sleep_consolidate as _sleep_con, episodic_decay_scan as _ep_scan
+            from memory_os.store.vfs_compat import sleep_consolidate as _sleep_con, episodic_decay_scan as _ep_scan
             ep_total = {"promoted": 0, "decayed": 0, "sc_merged": 0}
             for proj in projects:
                 try:

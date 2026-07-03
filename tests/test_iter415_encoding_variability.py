@@ -33,17 +33,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store_vfs import (
+from memory_os.store.vfs_compat import (
     ensure_schema,
     compute_context_enrichment,
     encoding_variability_bonus,
     apply_encoding_variability,
     update_accessed,
 )
-from store import insert_chunk
-import config
+from memory_os.store.api import insert_chunk
+import memory_os.config.sysctl as config
 
 
 @pytest.fixture

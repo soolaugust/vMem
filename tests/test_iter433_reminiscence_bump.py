@@ -30,15 +30,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store_vfs import (
+from memory_os.store.vfs_compat import (
     ensure_schema,
     compute_reminiscence_bump_factor,
     apply_reminiscence_bump,
     apply_reminiscence_bump_batch,
 )
-import config
+import memory_os.config.sysctl as config
 
 
 @pytest.fixture
@@ -211,7 +211,7 @@ def test_rb8_stability_capped_at_365(conn):
 
 def test_rb9_batch_applies_bump_to_early_chunks(conn):
     """RB9: apply_reminiscence_bump_batch 后，形成期 chunk stability > 晚期 chunk。"""
-    from store_vfs import apply_reminiscence_bump_batch
+    from memory_os.store.vfs_compat import apply_reminiscence_bump_batch
 
     # 项目跨度 90 天，bump_pct=15% → 前 13.5 天是形成期
     # 早期 chunk：87 天前（距项目起点 3 天，position_pct=3/90=3.3%）

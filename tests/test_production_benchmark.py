@@ -34,7 +34,7 @@ def test_production_benchmark_report_is_readable(tmp_path: Path) -> None:
     assert payload["verdict"]["score"] >= 70
     assert payload["verdict"]["gates_failed"] == []
     names = {item["name"] for item in payload["checks"]}
-    assert "context_hard_overflow_no_block" in names
+    assert "context_hard_overflow_enters_working_set" in names
     assert "critical_pressure_sheds_retriever" in names
     text = markdown.read_text(encoding="utf-8")
     assert "Value At A Glance" in text

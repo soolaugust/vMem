@@ -22,9 +22,9 @@ from datetime import datetime, timezone, timedelta
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store import open_db, ensure_schema
+from memory_os.store.api import open_db, ensure_schema
 from tools.semantic_consolidator import (
     run_consolidation,
     SEMANTIC_PROJECT,
@@ -331,7 +331,7 @@ def test_sc7_tags_contain_source_projects():
 
 def test_sc8_semantic_layer_fts_searchable():
     """SC8: __semantic__ project 的 chunk 可以被 fts_search 检索到。"""
-    from store_vfs import insert_chunk, fts_search
+    from memory_os.store.vfs_compat import insert_chunk, fts_search
     conn = open_db()
     ensure_schema(conn)
 

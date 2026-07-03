@@ -31,7 +31,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("MEMORY_OS_TESTING", "1")
 
-from store_mm import anon_vma_prepare, _anon_vma_extract_entities
+from memory_os.store.mm import anon_vma_prepare, _anon_vma_extract_entities
 
 
 def _make_db():
@@ -177,7 +177,7 @@ def test_disabled():
     _insert_chunk(conn, "import-dis", "[capabilities] 功能模块 > 详细说明")
 
     # Monkey-patch config
-    import config
+    import memory_os.config.sysctl as config
     original = config._REGISTRY.get("anon_vma_prepare.enabled")
     config._REGISTRY["anon_vma_prepare.enabled"] = (False, bool, None, None, None, "test")
     try:
@@ -321,7 +321,7 @@ def test_performance():
         )
 
     # Patch max_backfill to allow all 100
-    import config
+    import memory_os.config.sysctl as config
     orig = config._REGISTRY.get("anon_vma_prepare.max_backfill")
     config._REGISTRY["anon_vma_prepare.max_backfill"] = (100, int, 5, 200, None, "test")
     try:

@@ -15,12 +15,12 @@ sys.path.insert(0, str(_ROOT))
 os.environ["MEMORY_OS_MGLRU_MAX_GEN"] = "4"
 os.environ["MEMORY_OS_MGLRU_AGING_INTERVAL_HOURS"] = "1"  # 测试时最小间隔1h（min=1）
 
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
-from store import (
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+from memory_os.store.api import (
     open_db, ensure_schema, get_chunks,
     mglru_aging, mglru_promote, mglru_stats, evict_lowest_retention,
 )
-from config import get as _cfg
+from memory_os.config.sysctl import get as _cfg
 
 PROJECT = "test_mglru"
 PASSED = 0

@@ -16,7 +16,7 @@ _tmp_dir = tempfile.mkdtemp(prefix="iter86_")
 os.environ["MEMORY_OS_DIR"] = _tmp_dir
 os.environ["MEMORY_OS_DB"] = str(Path(_tmp_dir) / "store.db")
 
-from store import open_db, ensure_schema, dmesg_log, DMESG_INFO
+from memory_os.store.api import open_db, ensure_schema, dmesg_log, DMESG_INFO
 
 
 if __name__ == "__main__":
@@ -55,9 +55,9 @@ if __name__ == "__main__":
 
     def run_loader_main(project):
         """直接调用 loader 的 working_set 查询和 shadow_trace 写入逻辑（不依赖 stdin）"""
-        from store import open_db, ensure_schema
-        from config import get as _sysctl
-        from scorer import working_set_score as _unified_ws_score
+        from memory_os.store.api import open_db, ensure_schema
+        from memory_os.config.sysctl import get as _sysctl
+        from memory_os.core.scorer import working_set_score as _unified_ws_score
 
         MEMORY_OS_DIR_PATH = Path(os.environ["MEMORY_OS_DIR"])
         STORE_DB = Path(os.environ["MEMORY_OS_DB"])
@@ -70,7 +70,7 @@ if __name__ == "__main__":
         # 模拟 loader 的 working_set 查询
         conn = open_db()
         ensure_schema(conn)
-        from store import get_chunks as store_get_chunks
+        from memory_os.store.api import get_chunks as store_get_chunks
         chunks = store_get_chunks(conn, project, chunk_types=WORKING_SET_TYPES)
         conn.close()
 

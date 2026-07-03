@@ -81,7 +81,7 @@ def test_basic_cooccurrence_activation():
     _add_entity_map(conn, "linux", "candidate1")
     conn.commit()
 
-    from store_vfs import shmem_link
+    from memory_os.store.vfs_compat import shmem_link
     result = shmem_link(conn, ["hit1"], project=_PROJECT)
     assert "candidate1" in result
     assert 0 < result["candidate1"] <= 0.25
@@ -98,7 +98,7 @@ def test_min_shared_entities_filter():
     _add_entity_map(conn, "memory", "weak_candidate")  # only 1 shared
     conn.commit()
 
-    from store_vfs import shmem_link
+    from memory_os.store.vfs_compat import shmem_link
     result = shmem_link(conn, ["hit1"], project=_PROJECT)
     assert "weak_candidate" not in result
 
@@ -115,7 +115,7 @@ def test_existing_ids_excluded():
     _add_entity_map(conn, "linux", "already_seen")
     conn.commit()
 
-    from store_vfs import shmem_link
+    from memory_os.store.vfs_compat import shmem_link
     result = shmem_link(conn, ["hit1"], project=_PROJECT,
                         existing_ids={"already_seen"})
     assert "already_seen" not in result
@@ -133,7 +133,7 @@ def test_hit_chunk_not_in_result():
     _add_entity_map(conn, "linux", "candidate1")
     conn.commit()
 
-    from store_vfs import shmem_link
+    from memory_os.store.vfs_compat import shmem_link
     result = shmem_link(conn, ["hit1"], project=_PROJECT)
     assert "hit1" not in result
 
@@ -160,7 +160,7 @@ def test_idf_weighting_favors_rare_entities():
     _add_entity_map(conn, "generic", "noise1")
     conn.commit()
 
-    from store_vfs import shmem_link
+    from memory_os.store.vfs_compat import shmem_link
     result = shmem_link(conn, ["hit1"], project=_PROJECT)
     # rare_match shares a rare entity → higher IDF score
     if "rare_match" in result and "common_match" in result:
@@ -180,7 +180,7 @@ def test_max_results_cap():
     _add_entity_map(conn, "beta", "hit1")
     conn.commit()
 
-    from store_vfs import shmem_link
+    from memory_os.store.vfs_compat import shmem_link
     result = shmem_link(conn, ["hit1"], project=_PROJECT, max_results=3)
     assert len(result) <= 3
 
@@ -205,7 +205,7 @@ def test_disabled():
     importlib.reload(config)
     importlib.reload(store_vfs)
 
-    from store_vfs import shmem_link
+    from memory_os.store.vfs_compat import shmem_link
     result = shmem_link(conn, ["hit1"], project=_PROJECT)
     assert result == {}
 
@@ -218,7 +218,7 @@ def test_disabled():
 def test_empty_hit_ids():
     """Empty hit_chunk_ids returns empty."""
     conn = _make_db()
-    from store_vfs import shmem_link
+    from memory_os.store.vfs_compat import shmem_link
     result = shmem_link(conn, [], project=_PROJECT)
     assert result == {}
 
@@ -229,7 +229,7 @@ def test_no_entity_map_entries():
     _add_chunk(conn, "orphan_hit")
     conn.commit()
 
-    from store_vfs import shmem_link
+    from memory_os.store.vfs_compat import shmem_link
     result = shmem_link(conn, ["orphan_hit"], project=_PROJECT)
     assert result == {}
 
@@ -247,7 +247,7 @@ def test_cross_project_cooccurrence():
     _add_entity_map(conn, "shared_ent2", "cross_proj_cand", project="other-project")
     conn.commit()
 
-    from store_vfs import shmem_link
+    from memory_os.store.vfs_compat import shmem_link
     result = shmem_link(conn, ["hit1"], project=_PROJECT)
     # Cross-project activation is by design (shmem = cross-namespace shared memory)
     assert "cross_proj_cand" in result
@@ -267,7 +267,7 @@ def test_multiple_hit_chunks():
     _add_entity_map(conn, "beta", "cand1")
     conn.commit()
 
-    from store_vfs import shmem_link
+    from memory_os.store.vfs_compat import shmem_link
     result = shmem_link(conn, ["hit1", "hit2"], project=_PROJECT)
     assert "cand1" in result  # shares 2 entities across both hits
 
@@ -287,7 +287,7 @@ def test_score_normalization():
     _add_entity_map(conn, "e3", "hit1")
     conn.commit()
 
-    from store_vfs import shmem_link
+    from memory_os.store.vfs_compat import shmem_link
     result = shmem_link(conn, ["hit1"], project=_PROJECT)
     for score in result.values():
         assert score <= 0.25
@@ -304,7 +304,7 @@ def test_idempotent():
     _add_entity_map(conn, "y", "cand1")
     conn.commit()
 
-    from store_vfs import shmem_link
+    from memory_os.store.vfs_compat import shmem_link
     r1 = shmem_link(conn, ["hit1"], project=_PROJECT)
     r2 = shmem_link(conn, ["hit1"], project=_PROJECT)
     assert r1 == r2
@@ -324,7 +324,7 @@ def test_performance():
         _add_entity_map(conn, f"ent_{j}", "hit1")
     conn.commit()
 
-    from store_vfs import shmem_link
+    from memory_os.store.vfs_compat import shmem_link
     t0 = time.time()
     result = shmem_link(conn, ["hit1"], project=_PROJECT)
     elapsed = time.time() - t0

@@ -50,18 +50,18 @@ print(f"[INIT] Tmpdir: {tmpdir}")
 os.environ["MEMORY_OS_DIR"] = str(Path(tmpdir) / "memory-os")
 os.environ["MEMORY_OS_DB"] = str(TEST_STORE_DB)
 
-from store_core import (
+from memory_os.store.core import (
     open_db, ensure_schema, insert_chunk, get_project_chunk_count,
     dmesg_log, DMESG_INFO,
     fts_search, swap_out, checkpoint_dump, checkpoint_restore,
 )
-from store_mm import (
+from memory_os.store.mm import (
     kswapd_scan, psi_stats, context_pressure_governor,
     madvise_read, readahead_pairs, watchdog_check,
     damon_scan, mglru_aging, autotune, compact_zone,
 )
-from scorer import retrieval_score, retention_score, freshness_bonus
-from bm25 import bm25_scores, hybrid_tokenize
+from memory_os.core.scorer import retrieval_score, retention_score, freshness_bonus
+from memory_os.core.bm25 import bm25_scores, hybrid_tokenize
 
 
 # ── Step 1: 从真实 recall_traces 提取历史延迟 ─────────────────────

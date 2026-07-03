@@ -23,10 +23,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent / "hooks"))
 
-import tmpfs  # noqa — 设置测试 DB 路径
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa — 设置测试 DB 路径
 
-from store_vfs import reap_ghosts, fts_search
-from store import open_db, ensure_schema
+from memory_os.store.vfs_compat import reap_ghosts, fts_search
+from memory_os.store.api import open_db, ensure_schema
 
 
 def _make_chunk(conn, chunk_id, importance, summary, project="test",

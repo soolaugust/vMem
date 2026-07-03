@@ -5,7 +5,7 @@ test_iter84_readonly.py — Read-Only Fast Path 测试
 
 OS 类比：open(O_RDONLY) + write-back caching 测试
 """
-import tmpfs  # 测试隔离（迭代54）：必须在 store import 前
+import memory_os.runtime.tmpfs_compat as tmpfs  # 测试隔离（迭代54）：必须在 store import 前
 
 import json
 import os
@@ -19,10 +19,10 @@ from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 
 # memory-os imports
-from store import (open_db, ensure_schema, insert_chunk, fts_search,
+from memory_os.store.api import (open_db, ensure_schema, insert_chunk, fts_search,
                    update_accessed, dmesg_log, DMESG_INFO, DMESG_WARN,
                    DMESG_DEBUG, get_chunks, insert_trace)
-from store_core import STORE_DB, MEMORY_OS_DIR, bump_chunk_version
+from memory_os.store.core import STORE_DB, MEMORY_OS_DIR, bump_chunk_version
 
 
 def _make_chunk(cid, summary, project="test_proj", chunk_type="decision",

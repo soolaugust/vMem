@@ -24,10 +24,10 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store import open_db, ensure_schema
-from store_vfs import insert_chunk, compute_source_reliability
+from memory_os.store.api import open_db, ensure_schema
+from memory_os.store.vfs_compat import insert_chunk, compute_source_reliability
 
 
 def _make_chunk(cid, project, source_type=None, confidence_score=None,
@@ -108,7 +108,7 @@ def test_cw2_low_source_reliability_low_confidence():
 
     # 检查各 source_type 的 reliability
     # 通过 compute_source_reliability 找到低可信的组合
-    from store_vfs import compute_source_reliability as _csr
+    from memory_os.store.vfs_compat import compute_source_reliability as _csr
     low_sr = _csr("task_state", "rumor", "some uncertain content")
     print(f"  CW2 INFO: task_state/rumor → source_reliability={low_sr:.3f}")
 

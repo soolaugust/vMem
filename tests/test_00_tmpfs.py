@@ -30,8 +30,8 @@ if _PROD_DB.exists():
         pass
     _c.close()
 
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
-from store import open_db, ensure_schema, insert_chunk, STORE_DB, MEMORY_OS_DIR
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+from memory_os.store.api import open_db, ensure_schema, insert_chunk, STORE_DB, MEMORY_OS_DIR
 
 
 # 迭代90：Redundant test removed
@@ -110,7 +110,7 @@ def test_no_production_pollution():
 
 def test_madvise_in_tmpfs():
     """T6: madvise 文件写入临时目录"""
-    from store import madvise_write
+    from memory_os.store.api import madvise_write
     conn = open_db()
     ensure_schema(conn)
     madvise_write("test_tmpfs_isolation", ["test_entity_1", "test_entity_2"])

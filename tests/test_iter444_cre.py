@@ -36,13 +36,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store_vfs import (
+from memory_os.store.vfs_compat import (
     ensure_schema,
     apply_contextual_reinstatement_consolidation,
 )
-import config
+import memory_os.config.sysctl as config
 
 # session chunk: last_accessed within 2h window (session entities 构建来源)
 SESSION_ACCESSED_DAYS = 0.03   # ~43 minutes ago → within 2h window

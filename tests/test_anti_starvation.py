@@ -17,14 +17,14 @@ import math
 
 # 测试隔离
 sys.path.insert(0, os.path.dirname(__file__))
-import tmpfs  # noqa: F401 — 自动设置临时目录
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — 自动设置临时目录
 
-from scorer import (
+from memory_os.core.scorer import (
     saturation_penalty, starvation_boost, retrieval_score,
     exploration_bonus, freshness_bonus, access_bonus,
 )
-from config import get as sysctl
-import store
+from memory_os.config.sysctl import get as sysctl
+import memory_os.store.api as store
 import json
 from datetime import datetime, timezone, timedelta
 

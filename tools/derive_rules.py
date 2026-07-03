@@ -23,8 +23,8 @@ from datetime import datetime, timezone
 
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
-from store import open_db
-from utils import resolve_project_id
+from memory_os.store.api import open_db
+from memory_os.core.utils import resolve_project_id
 
 MARKER_START = "<!-- AUTO-DERIVED-RULES:START -->"
 MARKER_END   = "<!-- AUTO-DERIVED-RULES:END -->"

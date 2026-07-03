@@ -47,17 +47,17 @@ def fresh_db(tmp_path, monkeypatch):
     monkeypatch.setenv("MEMORY_OS_DIR", str(db_dir))
     monkeypatch.setenv("MEMORY_OS_DB", str(db_path))
 
-    import store as _store
-    import store_core as _core
-    import store_vfs as _vfs
-    import store_criu as _criu
+    import memory_os.store.api as _store
+    import memory_os.store.core as _core
+    import memory_os.store.vfs_compat as _vfs
+    import memory_os.store.criu as _criu
 
     monkeypatch.setattr(_store, "STORE_DB", db_path)
     monkeypatch.setattr(_core, "STORE_DB", db_path)
     monkeypatch.setattr(_vfs, "STORE_DB", db_path)
     monkeypatch.setattr(_criu, "MEMORY_OS_DIR", db_dir)
 
-    from store import open_db, ensure_schema
+    from memory_os.store.api import open_db, ensure_schema
     conn = open_db()
     ensure_schema(conn)
     conn.commit()
@@ -243,13 +243,13 @@ def test_A4_criu_checkpoint_cleanup_isolation(fresh_db, monkeypatch):
     """
     db_dir, db_path, conn = fresh_db
 
-    from store_criu import _ensure_checkpoint_schema, _checkpoint_cleanup
+    from memory_os.store.criu import _ensure_checkpoint_schema, _checkpoint_cleanup
 
     # 确保 schema
     _ensure_checkpoint_schema(conn)
 
     # sysctl max_checkpoints = 2
-    from config import sysctl_set as _cfg_set
+    from memory_os.config.sysctl import sysctl_set as _cfg_set
     _cfg_set("criu.max_checkpoints", 2)
 
     project = "proj"
@@ -298,7 +298,7 @@ def test_A5_checkpoint_dump_passes_session_id(fresh_db, monkeypatch):
     """
     db_dir, db_path, conn = fresh_db
 
-    from store_criu import _ensure_checkpoint_schema
+    from memory_os.store.criu import _ensure_checkpoint_schema
     _ensure_checkpoint_schema(conn)
 
     # 先在 DB 中插入一个 chunk 供 dump 查询
@@ -313,7 +313,7 @@ def test_A5_checkpoint_dump_passes_session_id(fresh_db, monkeypatch):
     # 捕获 _checkpoint_cleanup 的调用参数
     captured_calls = []
 
-    import store_criu as _criu_mod
+    import memory_os.store.criu as _criu_mod
     original_cleanup = _criu_mod._checkpoint_cleanup
 
     def mock_cleanup(conn, project, session_id=""):
@@ -322,7 +322,7 @@ def test_A5_checkpoint_dump_passes_session_id(fresh_db, monkeypatch):
 
     monkeypatch.setattr(_criu_mod, "_checkpoint_cleanup", mock_cleanup)
 
-    from store_criu import checkpoint_dump
+    from memory_os.store.criu import checkpoint_dump
     result = checkpoint_dump(
         conn, "proj", "test-session-xyz",
         hit_chunk_ids=["chunk-test-1"]
@@ -376,7 +376,7 @@ def test_A6_active_suppression_reads_db(fresh_db, monkeypatch):
         "session_id": "different-session",
     }), encoding="utf-8")
 
-    import store as _store_mod
+    import memory_os.store.api as _store_mod
     monkeypatch.setattr(_store_mod, "STORE_DB", db_path)
 
     # 模拟 extractor Active Suppression 读取逻辑
@@ -480,7 +480,7 @@ def test_A8_criu_checkpoint_content_hash_validation(fresh_db):
     import hashlib
     db_dir, db_path, conn = fresh_db
 
-    from store_criu import _ensure_checkpoint_schema
+    from memory_os.store.criu import _ensure_checkpoint_schema
 
     _ensure_checkpoint_schema(conn)
 
@@ -512,8 +512,8 @@ def test_A8_criu_checkpoint_content_hash_validation(fresh_db):
     """, (_now_ts, json.dumps(snapshots),))
     conn.commit()
 
-    from store_criu import checkpoint_restore
-    import store_criu as _criu
+    from memory_os.store.criu import checkpoint_restore
+    import memory_os.store.criu as _criu
     _criu.MEMORY_OS_DIR = db_dir
 
     # monkeypatch config — criu.max_age_hours 默认已有值，无需 override
@@ -542,10 +542,10 @@ def test_A9_checkpoint_cleanup_fallback_no_session_id(fresh_db, monkeypatch):
     OS 类比：向后兼容 — 旧 API 调用方式仍然可用。
     """
     db_dir, db_path, conn = fresh_db
-    from store_criu import _ensure_checkpoint_schema, _checkpoint_cleanup
+    from memory_os.store.criu import _ensure_checkpoint_schema, _checkpoint_cleanup
     _ensure_checkpoint_schema(conn)
 
-    from config import sysctl_set as _cfg_set
+    from memory_os.config.sysctl import sysctl_set as _cfg_set
     _cfg_set("criu.max_checkpoints", 2)
 
     project = "proj-fallback"
@@ -747,7 +747,7 @@ def test_A13_cross_agent_notification_delivery(fresh_db, monkeypatch):
     db_dir, db_path, conn = fresh_db
 
     # monkeypatch net.agent_notify 使用 fresh_db 路径
-    import store_vfs as _vfs
+    import memory_os.store.vfs_compat as _vfs
     monkeypatch.setattr(_vfs, "STORE_DB", db_path)
 
     project = "test-notify-project"
@@ -756,7 +756,7 @@ def test_A13_cross_agent_notification_delivery(fresh_db, monkeypatch):
     stats = {"decisions": 3, "constraints": 1, "chunks": 5}
 
     # Step 1: Agent A 广播知识更新
-    from net.agent_notify import broadcast_knowledge_update, consume_pending_notifications
+    from memory_os.runtime.net.agent_notify import broadcast_knowledge_update, consume_pending_notifications
     result = broadcast_knowledge_update(project, session_a, stats)
     assert result is True, "broadcast_knowledge_update should return True on success"
 
@@ -802,10 +802,10 @@ def test_A14_multi_agent_broadcast_isolation(fresh_db, monkeypatch):
     """
     db_dir, db_path, conn = fresh_db
 
-    import store_vfs as _vfs
+    import memory_os.store.vfs_compat as _vfs
     monkeypatch.setattr(_vfs, "STORE_DB", db_path)
 
-    from net.agent_notify import broadcast_knowledge_update, consume_pending_notifications
+    from memory_os.runtime.net.agent_notify import broadcast_knowledge_update, consume_pending_notifications
 
     project = "shared-project"
     session_a = "agent-a-broadcast-111"
@@ -1117,7 +1117,7 @@ def test_A19_submit_extract_task_enqueues_to_ipc_msgq(fresh_db, monkeypatch, tmp
     """
     db_dir, db_path, conn = fresh_db
 
-    import store_vfs as _vfs
+    import memory_os.store.vfs_compat as _vfs
     monkeypatch.setattr(_vfs, "STORE_DB", db_path)
 
     import hooks.extractor_pool as _pool_mod
@@ -1169,10 +1169,10 @@ def test_A20_pool_dequeue_extract_task_from_ipc_msgq(fresh_db, monkeypatch):
     """
     db_dir, db_path, conn = fresh_db
 
-    import store_vfs as _vfs
+    import memory_os.store.vfs_compat as _vfs
     monkeypatch.setattr(_vfs, "STORE_DB", db_path)
 
-    from store_vfs import ipc_send
+    from memory_os.store.vfs_compat import ipc_send
     import hooks.extractor_pool as _pool_mod
     monkeypatch.setattr(_pool_mod, "STORE_DB", db_path)
 

@@ -14,9 +14,9 @@ import tempfile
 from pathlib import Path
 from datetime import datetime, timezone
 
-from vfs_core import VFSItem, VFSMetadata, VFSItemType, VFSSource
-from vfs_backend_sqlite import SQLiteBackend
-from vfs import KnowledgeVFS, DentryCache, InodeCache
+from memory_os.vfs.core import VFSItem, VFSMetadata, VFSItemType, VFSSource
+from memory_os.vfs.backend_sqlite import SQLiteBackend
+from memory_os.vfs.api import KnowledgeVFS, DentryCache, InodeCache
 
 
 class TestVFSItem:

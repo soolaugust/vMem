@@ -31,8 +31,8 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
-from store_vfs import ensure_schema, apply_enactment_effect, insert_chunk
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
+from memory_os.store.vfs_compat import ensure_schema, apply_enactment_effect, insert_chunk
 
 
 @pytest.fixture
@@ -137,7 +137,7 @@ def test_ee4_plain_text_no_boost(conn):
 def test_ee5_enactment_disabled(conn):
     """EE5: store_vfs.enactment_enabled=False 时，不应用任何加成。"""
     import unittest.mock as mock
-    import config as _config
+    import memory_os.config.sysctl as _config
 
     _insert_raw(conn, "ee5_chunk", stability=1.0, source_type="tool_result")
 
@@ -173,7 +173,7 @@ def test_ee6_stability_cap_respected(conn):
 def test_ee7_custom_boost_factor(conn):
     """EE7: enactment_boost 可通过 sysctl 配置，custom boost=2.0 时 stability 应翻倍。"""
     import unittest.mock as mock
-    import config as _config
+    import memory_os.config.sysctl as _config
 
     _insert_raw(conn, "ee7_chunk", stability=1.0, source_type="tool_result")
 

@@ -30,15 +30,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store_vfs import (
+from memory_os.store.vfs_compat import (
     ensure_schema,
     compute_permastore_floor,
     apply_retroactive_interference,
 )
-from store import insert_chunk
-import config
+from memory_os.store.api import insert_chunk
+import memory_os.config.sysctl as config
 
 
 @pytest.fixture
@@ -143,7 +143,7 @@ def test_pm2_permastore_ri_protected(conn, monkeypatch):
 def test_pm3_permastore_rif_protected(conn, monkeypatch):
     """permastore chunk → RIF 不能低于 stability × floor_factor。"""
     import unittest.mock as mock
-    from store_vfs import apply_retrieval_induced_forgetting
+    from memory_os.store.vfs_compat import apply_retrieval_induced_forgetting
 
     original_get = config.get
     def patched_get(key, project=None):
@@ -179,7 +179,7 @@ def test_pm3_permastore_rif_protected(conn, monkeypatch):
 def test_pm4_permastore_df_protected(conn, monkeypatch):
     """permastore chunk → Directed Forgetting 不能低于 stability × floor_factor。"""
     import unittest.mock as mock
-    from store_vfs import apply_directed_forgetting
+    from memory_os.store.vfs_compat import apply_directed_forgetting
 
     original_get = config.get
     def patched_get(key, project=None):

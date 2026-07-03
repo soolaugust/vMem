@@ -147,7 +147,7 @@ Detailed Claude Code hook configuration, daemon management, and troubleshooting 
 Three layers:
 
 1. **Hooks** — sit at the Claude Code syscall boundary (`SessionStart`, `UserPromptSubmit`, `Stop`, `PostToolUse`) and call into the store.
-2. **Store** — single SQLite file (WAL mode) with FTS5 full-text index, behind a unified VFS interface (`store.py` / `store_vfs.py` / `store_criu.py`).
+2. **Store** — single SQLite file (WAL mode) with FTS5 full-text index, behind a unified VFS interface (`memory_os.store.api` / `memory_os.store.vfs` / `memory_os.store.criu`).
 3. **Daemons & IPC** — persistent retriever daemon (Unix socket), async extractor pool (kworker-style), cross-agent notify bus.
 
 For the full layered diagram, on-disk schema, and the rationale behind each subsystem, see [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md). For the comprehensive OS-and-cognitive-science primitive mapping, see [`docs/DESIGN_PHILOSOPHY.md`](./docs/DESIGN_PHILOSOPHY.md).

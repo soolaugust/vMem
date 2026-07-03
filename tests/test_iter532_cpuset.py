@@ -4,7 +4,7 @@ iter532: cpuset — FTS5 Index Quarantine for Bandwidth Violators
 OS 类比：Linux sched_setaffinity() / cpuset (Ingo Molnár, 2004)
   物理隔离：从 FTS5 索引移除垄断 chunk，使搜索物理上不可能命中它。
 """
-import tmpfs  # noqa: F401 — must be before store imports for test isolation
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — must be before store imports for test isolation
 
 import json
 import os
@@ -15,12 +15,12 @@ from datetime import datetime, timezone
 
 import pytest
 
-from store import open_db, ensure_schema, bump_chunk_version
-from store_mm import (
+from memory_os.store.api import open_db, ensure_schema, bump_chunk_version
+from memory_os.store.mm import (
     cpuset_quarantine, _cpuset_load, _cpuset_save, _QUARANTINE_FILE,
 )
-from store_vfs import _cjk_tokenize, _normalize_structured_summary
-from config import get as _cfg
+from memory_os.store.vfs_compat import _cjk_tokenize, _normalize_structured_summary
+from memory_os.config.sysctl import get as _cfg
 
 
 _PROJECT = "test_cpuset_project"

@@ -10,11 +10,11 @@ OS 类比：Linux bdi_writeback (Jens Axboe, 2009, kernel 2.6.32, mm/backing-dev
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-import tmpfs  # noqa: E402 — must precede store imports for test isolation
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402 — must precede store imports for test isolation
 import sqlite3
 import pytest
-from store_mm import bdi_writeback
-from store_core import open_db, ensure_schema, insert_chunk, bump_chunk_version
+from memory_os.store.mm import bdi_writeback
+from memory_os.store.core import open_db, ensure_schema, insert_chunk, bump_chunk_version
 
 
 @pytest.fixture

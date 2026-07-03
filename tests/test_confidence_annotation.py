@@ -22,10 +22,10 @@ from datetime import datetime, timezone, timedelta
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import tmpfs  # noqa
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa
 
-from store import open_db, ensure_schema
-from store_mm import apply_ebbinghaus_decay
+from memory_os.store.api import open_db, ensure_schema
+from memory_os.store.mm import apply_ebbinghaus_decay
 
 
 # ── _conf_tag 逻辑镜像（与 retriever.py 保持同步）─────────────────────────────

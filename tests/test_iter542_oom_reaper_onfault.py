@@ -30,9 +30,9 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from store_core import open_db, ensure_schema, insert_chunk, OOM_ADJ_ONFAULT, OOM_ADJ_PROTECTED, OOM_ADJ_DEFAULT, OOM_ADJ_PREFER
-from store_mm import oom_reaper_onfault, mlock_onfault_promote, _PAGE_IDLE_FILE
-from schema import MemoryChunk
+from memory_os.store.core import open_db, ensure_schema, insert_chunk, OOM_ADJ_ONFAULT, OOM_ADJ_PROTECTED, OOM_ADJ_DEFAULT, OOM_ADJ_PREFER
+from memory_os.store.mm import oom_reaper_onfault, mlock_onfault_promote, _PAGE_IDLE_FILE
+from memory_os.core.schema import MemoryChunk
 
 
 @pytest.fixture
@@ -159,7 +159,7 @@ class TestOomReaperOnfault:
 
     def test_t7_max_per_scan_limit(self, conn, tmp_path, monkeypatch):
         """T7: max_per_scan 限制生效。"""
-        import config
+        import memory_os.config.sysctl as config
         orig_get = config.get
         def patched_get(key):
             if key == "oom_reaper_onfault.max_per_scan":
@@ -255,7 +255,7 @@ class TestOomReaperOnfault:
 
     def test_t12_config_tunables(self):
         """T12: config tunables 注册验证。"""
-        import config
+        import memory_os.config.sysctl as config
         src = open(os.path.join(os.path.dirname(__file__), "..", "config.py")).read()
         assert "oom_reaper_onfault.grace_sessions" in src
         assert "oom_reaper_onfault.max_per_scan" in src

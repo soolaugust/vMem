@@ -5,13 +5,13 @@ OS 类比：Linux shadow_lru_isolate() (Johannes Weiner, 2013, mm/workingset.c)
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: E402, F401 — 测试隔离
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402, F401 — 测试隔离
 import json
 import sqlite3
 import pytest
 from datetime import datetime, timezone
-from store_vfs import open_db, ensure_schema, insert_chunk
-from store_mm import trim_shadow_entries
+from memory_os.store.vfs_compat import open_db, ensure_schema, insert_chunk
+from memory_os.store.mm import trim_shadow_entries
 
 
 @pytest.fixture

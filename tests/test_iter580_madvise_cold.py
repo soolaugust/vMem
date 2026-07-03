@@ -23,12 +23,12 @@ from datetime import datetime, timezone, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from store_criu import (
+from memory_os.store.criu import (
     chunk_recall_counts,
     chunk_recall_counts_memcg,
     chunk_session_recall_counts,
 )
-from scorer import bandwidth_throttle, cfs_bandwidth_throttle
+from memory_os.core.scorer import bandwidth_throttle, cfs_bandwidth_throttle
 
 
 def _create_test_db():

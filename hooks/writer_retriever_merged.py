@@ -41,14 +41,14 @@ def _load_modules():
 
     sys.path.insert(0, str(Path(__file__).parent.parent))
 
-    from store import (
+    from memory_os.store.api import (
         open_db, ensure_schema, insert_chunk, get_project_chunk_count,
         evict_lowest_retention, kswapd_scan, dmesg_log, DMESG_INFO,
         DMESG_DEBUG, DMESG_WARN, already_exists, merge_similar
     )
-    from config import sysctl_get
-    from schema import MemoryChunk
-    from utils import resolve_project_id
+    from memory_os.config.sysctl import sysctl_get
+    from memory_os.core.schema import MemoryChunk
+    from memory_os.core.utils import resolve_project_id
 
     return {
         "sqlite3": sqlite3,

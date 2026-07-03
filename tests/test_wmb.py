@@ -13,7 +13,7 @@ test_wmb.py — 迭代316：工作记忆预算管理单元测试
 """
 
 import pytest
-from wmb import tier_chunks, apply_wmb_budget, wmb_stats
+from memory_os.runtime.wmb_compat import tier_chunks, apply_wmb_budget, wmb_stats
 
 
 def _make_chunk(cid, chunk_type="decision"):

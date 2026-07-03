@@ -31,26 +31,17 @@ Repository = "https://github.com/soolaugust/vMem"
 Issues = "https://github.com/soolaugust/vMem/issues"
 
 [project.scripts]
-vmem = "mcp_memory_lookup:main"
-memory-os = "mcp_memory_lookup:main"
+vmem = "memory_os.cli.mcp_memory_lookup:main"
+memory-os = "memory_os.cli.mcp_memory_lookup:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
+# Implementation lives under memory_os/; project root contains packaging/docs only.
 only-include = [
-    "mcp_memory_lookup.py",
-    "vmem_doctor.py",
-    "store_vfs.py",
-    "store_vfs_schema.py",
-    "store_vfs_effects_new.py",
-    "scorer.py",
-    "bm25.py",
-    "config.py",
-    "utils.py",
-    "schema.py",
-    "hooks/hooks.json",
-    "hooks/context_governor.py",
-    "hooks/prompt_budget_guard.py",
-    "hooks/retriever.py",
-    "hooks/retriever_daemon.py",
-    "hooks/retriever_wrapper.sh",
+    "memory_os",
+    "hooks",
+    "tools",
+    "README.md",
+    "README.zh.md",
+    "docs",
 ]

@@ -19,10 +19,14 @@ from pathlib import Path
 
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
-from schema import MemoryChunk
-from utils import resolve_project_id
-from store import open_db, ensure_schema, insert_chunk, already_exists, merge_similar, get_project_chunk_count, evict_lowest_retention, kswapd_scan, dmesg_log, DMESG_INFO, DMESG_WARN, DMESG_DEBUG, madvise_write, set_oom_adj, OOM_ADJ_PROTECTED, OOM_ADJ_ONFAULT, OOM_ADJ_PREFER, cgroup_throttle_check, checkpoint_dump, checkpoint_collect_hits, aimd_window, pin_chunk
-from config import get as _sysctl  # 迭代27: sysctl Runtime Tunables
+_HOOKS_DIR = Path(__file__).parent
+if str(_HOOKS_DIR) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_DIR))
+from memory_os.core.schema import MemoryChunk
+from memory_os.core.utils import resolve_project_id
+from memory_os.store.api import open_db, ensure_schema, insert_chunk, already_exists, merge_similar, get_project_chunk_count, evict_lowest_retention, kswapd_scan, dmesg_log, DMESG_INFO, DMESG_WARN, DMESG_DEBUG, madvise_write, set_oom_adj, OOM_ADJ_PROTECTED, OOM_ADJ_ONFAULT, OOM_ADJ_PREFER, cgroup_throttle_check, checkpoint_dump, checkpoint_collect_hits, aimd_window, pin_chunk
+from memory_os.config.sysctl import get as _sysctl  # 迭代27: sysctl Runtime Tunables
+from lib.prompt_io import read_hook_input
 
 MEMORY_OS_DIR = Path.home() / ".claude" / "memory-os"
 STORE_DB = MEMORY_OS_DIR / "store.db"
@@ -2597,7 +2601,7 @@ def _sqe_validate_importance(importance: float, summary: str, chunk_type: str) -
 
     # 可通过 sysctl 禁用
     try:
-        from config import get as _cfg534
+        from memory_os.config.sysctl import get as _cfg534
         if not _cfg534("extractor.sqe_validate_enabled"):
             return importance
     except Exception:
@@ -2611,7 +2615,7 @@ def _sqe_validate_importance(importance: float, summary: str, chunk_type: str) -
     # 编号列表项开头（"3. xxx"、"Q1. xxx"）且剥离后内容短 → 直接降级
     if _re_sqe.match(r'^(?:\d+\.|Q\d+\.)\s', s_clean) and len(s_clean) < 60:
         try:
-            from config import get as _cfg534c
+            from memory_os.config.sysctl import get as _cfg534c
             _cap = float(_cfg534c("extractor.sqe_low_density_cap") or 0.60)
         except Exception:
             _cap = 0.60
@@ -2667,7 +2671,7 @@ def _sqe_validate_importance(importance: float, summary: str, chunk_type: str) -
     # ── 判定：信号 < 2/5 → 低密度 → 降级 ──────────────────────────
     if density_signals < 2:
         try:
-            from config import get as _cfg534b
+            from memory_os.config.sysctl import get as _cfg534b
             _cap = float(_cfg534b("extractor.sqe_low_density_cap") or 0.60)
         except Exception:
             _cap = 0.60
@@ -2717,7 +2721,7 @@ def _route_info_class(chunk_type: str, summary: str) -> str:
     OS 类比：Linux VFS 文件类型路由（S_ISREG/S_ISDIR/S_ISLNK）——
       不同文件类型有不同的 page cache 策略和 eviction 优先级。
     """
-    from store_vfs import classify_memory_type as _classify
+    from memory_os.store.vfs_compat import classify_memory_type as _classify
     return _classify(chunk_type, summary)
 
 
@@ -3709,7 +3713,7 @@ def _write_chunk(chunk_type: str, summary: str, project: str, session_id: str,
     # agent 主动推理生成的 reasoning_chain/decision/causal_chain 受益于此效应
     # OS 类比：Linux CoW 触发后，进程私有页面加入 active_list（比继承页更高生成亲和性）
     try:
-        from config import get as _cget
+        from memory_os.config.sysctl import get as _cget
         if _cget("extractor.generation_boost_enabled"):
             _gen_types = set(t.strip() for t in
                              (_cget("extractor.generation_boost_types") or "").split(",") if t.strip())
@@ -3725,7 +3729,7 @@ def _write_chunk(chunk_type: str, summary: str, project: str, session_id: str,
     # iter503: Writeback Pressure — 写入反压
     # OS 类比：balance_dirty_pages_ratelimited() — 零访问率高时降级新 chunk importance
     try:
-        from store_vfs import writeback_pressure as _writeback_pressure
+        from memory_os.store.vfs_compat import writeback_pressure as _writeback_pressure
         _wb_conn = conn if conn is not None else open_db()
         if conn is None:
             ensure_schema(_wb_conn)
@@ -3741,14 +3745,14 @@ def _write_chunk(chunk_type: str, summary: str, project: str, session_id: str,
     # OS 类比：Linux PELT (Vincent Guittot, 2012) — 按 sched_entity 历史利用率
     # 决定任务放置。低 util_avg 的 chunk_type importance 自动折扣。
     try:
-        from store_mm import pelt_discount as _pelt_discount
+        from memory_os.store.mm import pelt_discount as _pelt_discount
         importance = _pelt_discount(project, chunk_type, importance)
     except Exception:
         pass
 
     # 迭代315：提取编码情境（Encoding Specificity, Tulving 1973）
     try:
-        from store_vfs import extract_encoding_context as _extract_enc_ctx
+        from memory_os.store.vfs_compat import extract_encoding_context as _extract_enc_ctx
         encoding_context = _extract_enc_ctx(summary)
     except Exception:
         encoding_context = {}
@@ -3941,7 +3945,7 @@ def _write_chunk(chunk_type: str, summary: str, project: str, session_id: str,
                                 "UPDATE memory_chunks SET content=?, importance=MAX(importance,?), "
                                 "updated_at=? WHERE id=?",
                                 (_new784, importance, datetime.now(timezone.utc).isoformat(), _merge_id784))
-                            from store_vfs import _fts5_sync_chunk
+                            from memory_os.store.vfs_compat import _fts5_sync_chunk
                             _fts5_sync_chunk(conn, _merge_id784, summary=None, content=_new784)
                         dmesg_log(conn, DMESG_INFO, "extractor",
                                   f"iter784_burst_cap: {chunk_type} merged into {_merge_id784[:12]} "
@@ -3980,7 +3984,7 @@ def _write_chunk(chunk_type: str, summary: str, project: str, session_id: str,
                 (summary, chunk_type),
             ).fetchone()
             _schema_cid = _schema_row[0] if _schema_row else chunk.id
-            from store_vfs import anchor_chunk_schema as _anchor_schema
+            from memory_os.store.vfs_compat import anchor_chunk_schema as _anchor_schema
             _anchor_schema(conn, _schema_cid, summary, project)
         except Exception:
             pass  # schema anchoring 失败不影响主流程
@@ -4002,7 +4006,7 @@ def _write_chunk(chunk_type: str, summary: str, project: str, session_id: str,
             try:
                 # _schema_cid 由 iter380 块设置；若 iter380 失败则退回 chunk.id
                 _new_cid = locals().get("_schema_cid") or chunk.id
-                from store_vfs import (detect_conflict as _detect_conflict,
+                from memory_os.store.vfs_compat import (detect_conflict as _detect_conflict,
                                        supersede_chunk as _supersede_chunk)
                 _conflict_ids = _detect_conflict(conn, summary, chunk_type, project)
                 for _old_id in _conflict_ids:
@@ -4017,7 +4021,7 @@ def _write_chunk(chunk_type: str, summary: str, project: str, session_id: str,
                         # 真值来源：supersede 演化事件 ∩ 召回历史，零 LLM 猜测。可恢复（正反馈拉回）。
                         if _was_recently_recalled(conn, _old_id, project, n=20):
                             try:
-                                from store_vfs import update_confidence as _upd_conf
+                                from memory_os.store.vfs_compat import update_confidence as _upd_conf
                                 _upd_conf(conn, _old_id, -0.25,
                                           "implicit_correction_superseded",
                                           verification_status="disputed")
@@ -4039,7 +4043,7 @@ def _write_chunk(chunk_type: str, summary: str, project: str, session_id: str,
             ).fetchone()
             if _new_row2:
                 _cid2, _cur_imp = _new_row2[0], _new_row2[1] or importance
-                from store_vfs import apply_emotional_salience
+                from memory_os.store.vfs_compat import apply_emotional_salience
                 apply_emotional_salience(conn, _cid2, summary, _cur_imp)
         except Exception:
             pass  # 情感调整失败不影响主流程
@@ -4048,7 +4052,7 @@ def _write_chunk(chunk_type: str, summary: str, project: str, session_id: str,
         # OS 类比：MESI 协议 Modified → Invalidate — 新写入触发旧矛盾 chunk 降权
         # 认知科学：前向干扰（Retroactive Interference）— 新记忆降低旧矛盾记忆的提取
         try:
-            from store_vfs import detect_and_invalidate_conflicts
+            from memory_os.store.vfs_compat import detect_and_invalidate_conflicts
             _conflict_count = detect_and_invalidate_conflicts(
                 conn, summary, chunk_type, project
             )
@@ -4062,7 +4066,7 @@ def _write_chunk(chunk_type: str, summary: str, project: str, session_id: str,
         # 实现：新 chunk 写入后，若 find_similar 发现语义相似的旧 chunk
         #   → 新 chunk importance × 1.1（cap 0.99），增强检索竞争力
         try:
-            from store_vfs import find_similar as _find_sim_pi
+            from memory_os.store.vfs_compat import find_similar as _find_sim_pi
             _old_sim_id = _find_sim_pi(conn, summary, chunk_type, project=project)
             if _old_sim_id:
                 # 找到语义相似的旧 chunk → 新 chunk importance 上调
@@ -4094,7 +4098,7 @@ def _write_chunk(chunk_type: str, summary: str, project: str, session_id: str,
         #   iter386：检测宽泛语义相似（Jaccard）→ retrievability -= penalty
         # 两者共同防止过时知识污染注入。
         try:
-            from store_vfs import interference_decay as _interference_decay
+            from memory_os.store.vfs_compat import interference_decay as _interference_decay
             _chunk_dict_for_decay = {"id": locals().get("_pi_id") or chunk.id,
                                      "summary": summary,
                                      "chunk_type": chunk_type}
@@ -4114,7 +4118,7 @@ def _write_chunk(chunk_type: str, summary: str, project: str, session_id: str,
         try:
             _pm_pattern = _detect_prospective_intent(summary)
             if _pm_pattern:
-                from store_vfs import insert_trigger as _insert_trigger
+                from memory_os.store.vfs_compat import insert_trigger as _insert_trigger
                 import hashlib as _hashlib
                 _tid = "trig_" + _hashlib.md5(
                     f"{chunk.id}:{_pm_pattern}".encode()
@@ -4140,7 +4144,7 @@ def _write_chunk(chunk_type: str, summary: str, project: str, session_id: str,
 
         # 迭代100：IPC 广播知识更新（OS 类比：inotify — 文件变更通知）
         try:
-            from store_vfs import ipc_broadcast_knowledge_update
+            from memory_os.store.vfs_compat import ipc_broadcast_knowledge_update
             ipc_broadcast_knowledge_update(conn, session_id, project,
                                            {"chunk_type": chunk_type, "action": "insert"})
         except Exception:
@@ -4556,10 +4560,10 @@ def _extract_entity_relations(text: str, project: str, session_id: str, conn) ->
 
     # 避免循环导入：延迟导入 insert_edge
     try:
-        from store_vfs import insert_edge
+        from memory_os.store.vfs_compat import insert_edge
     except ImportError:
         try:
-            from store import insert_edge  # type: ignore
+            from memory_os.store.api import insert_edge  # type: ignore
         except ImportError:
             return 0
 
@@ -4746,10 +4750,10 @@ def extract_and_write_summary_triples(
         return 0
 
     try:
-        from store_vfs import insert_edge
+        from memory_os.store.vfs_compat import insert_edge
     except ImportError:
         try:
-            from store import insert_edge  # type: ignore
+            from memory_os.store.api import insert_edge  # type: ignore
         except ImportError:
             return 0
 
@@ -4773,11 +4777,7 @@ def main():
     import time as _time
     _t_start = _time.time()
 
-    try:
-        raw = sys.stdin.read()
-        hook_input = json.loads(raw) if raw.strip() else {}
-    except Exception:
-        hook_input = {}
+    hook_input = read_hook_input()
 
     text = hook_input.get("last_assistant_message", "")
     if not text or len(text) < _sysctl("extractor.min_length"):
@@ -4797,7 +4797,7 @@ def main():
         # 根因防复发：度量不能依赖抽取 pipeline 或常驻 daemon——它必须挂在 Stop hook
         # 必经的同步入口。轻量、只读 recall_traces + 文本重叠，开销 < 1ms。
         try:
-            from store import open_db, ensure_schema
+            from memory_os.store.api import open_db, ensure_schema
             _mc = open_db(); ensure_schema(_mc)
             measure_application_sync(
                 _mc, project, session_id,
@@ -5150,7 +5150,10 @@ def main():
             if not _is_quality_chunk(summary):
                 continue
             # iter105: 量化证据写成独立 chunk_type，不混入 decision
-            if summary in quant_set:
+            # iterNNNN: decision 优先 — 含决策动词的量化条目应写为 decision 而非 quantitative_evidence
+            # 根因：91% chunk 被 quant_set 吞没为 quantitative_evidence，有决策语义的条目丧失独立检索价值
+            # 修复：quant_set 条目先过 _is_quality_decision，命中则写 decision，纯量化才写 quantitative_evidence
+            if summary in quant_set and not _is_quality_decision(summary):
                 # 构建富 content：topic + 相邻量化结论（±1 邻居）
                 _q_pos = _qualified_quant.index(summary) if summary in _qualified_quant else -1
                 if _q_pos >= 0:
@@ -5194,6 +5197,18 @@ def main():
                                  importance_override=imp, _txn_managed=True,
                                  raw_snippet=_context_snippet(summary))
                     _track_throttled_chunk(summary, "decision")
+            else:
+                # iterNNNN: decision 统一 SNR gate — quant_set 决策项与普通 decision 均需通过。
+                if not _is_quality_decision(summary):
+                    dmesg_log(conn, DMESG_DEBUG, "extractor",
+                              f"snr_filter: decision dropped (no anchor) '{summary[:40]}'",
+                              session_id=session_id, project=project)
+                    continue
+                imp = _throttled_importance(0.85)
+                _write_chunk("decision", summary, project, session_id, topic, conn,
+                             importance_override=imp, _txn_managed=True,
+                             raw_snippet=_context_snippet(summary))
+                _track_throttled_chunk(summary, "decision")
         for summary in excluded:
             if _is_quality_chunk(summary):
                 # iter953: excluded_path_min_density — 纯符号名无独立检索价值
@@ -5363,7 +5378,7 @@ def main():
         # OS 类比：cgroup v2 memory.high 下的分配会被计入 memory.stat.high 计数，
         # 这些页面在后续 kswapd 扫描中有更高的回收概率
         if throttled_chunk_ids and throttle["oom_adj_delta"] > 0:
-            from store import batch_set_oom_adj
+            from memory_os.store.api import batch_set_oom_adj
             batch_set_oom_adj(conn, throttled_chunk_ids, throttle["oom_adj_delta"])
 
         # 增强2：从 transcript Bash tool_result 提取量化结论（tool_insight 类型）
@@ -5438,7 +5453,7 @@ def main():
         # commit 成功后广播本轮写入统计，其他 agent 的 loader 可在 SessionStart 消费
         if _chunk_count > 0:
             try:
-                from net.agent_notify import broadcast_knowledge_update
+                from memory_os.runtime.net.agent_notify import broadcast_knowledge_update
                 broadcast_knowledge_update(project, session_id, {
                     "decisions": len(decisions),
                     "constraints": len(constraints),
@@ -5498,7 +5513,7 @@ def main():
         hit_ids = checkpoint_collect_hits(ckpt_conn, project, session_id)
         if hit_ids:
             # 读取当前 madvise hints 作为 checkpoint 的一部分
-            from store import madvise_read
+            from memory_os.store.api import madvise_read
             current_hints = madvise_read(project)
             hint_keywords = [h.get("keyword", "") for h in current_hints] if current_hints else []
 
@@ -5577,7 +5592,7 @@ def main():
     try:
         _gc_conn = open_db()
         ensure_schema(_gc_conn)
-        from store_vfs import delete_chunks as _gc_delete_chunks
+        from memory_os.store.vfs_compat import delete_chunks as _gc_delete_chunks
         _gc_pc_ids = [r[0] for r in _gc_conn.execute(
             "SELECT id FROM memory_chunks WHERE chunk_type = 'prompt_context'"
         ).fetchall()]
@@ -5686,7 +5701,7 @@ def main():
             # iter259: soft-pin 关联 chunk，防止被 kswapd 在 24h 有效期内淘汰
             if _intent_chunk_ids:
                 try:
-                    from store_vfs import pin_chunk as _pin_chunk
+                    from memory_os.store.vfs_compat import pin_chunk as _pin_chunk
                     _pinned = 0
                     for _cid in _intent_chunk_ids:
                         if _pin_chunk(_intent_conn, _cid, project, pin_type="soft"):
@@ -5733,7 +5748,7 @@ def main():
                 if _shadow_proj == project:
                     _injected_ids = _shadow.get("top_k_ids", [])
         if _injected_ids:
-            from store_vfs import suppress_unused as _suppress_unused
+            from memory_os.store.vfs_compat import suppress_unused as _suppress_unused
             _sup_conn = open_db()
             ensure_schema(_sup_conn)
             _sup_n = _suppress_unused(
@@ -5751,7 +5766,7 @@ def main():
     # ── 迭代311-C：Sleep Consolidation — session 结束自动维护记忆 ──────────────
     # OS 类比：pdflush writeback + KSM — 进程退出时合并相似页、稳定活跃页、淘汰陈旧页
     try:
-        from store_vfs import sleep_consolidate as _sleep_consolidate
+        from memory_os.store.vfs_compat import sleep_consolidate as _sleep_consolidate
         _slp_conn = open_db()
         ensure_schema(_slp_conn)
         _slp_result = _sleep_consolidate(_slp_conn, project=project, session_id=session_id)
@@ -5777,7 +5792,7 @@ def main():
     # 现挂在 Sleep Consolidation 旁——语义上 pin 衰退属"睡眠巩固"的一部分。
     # 依据 apply_count（被真正用上）而非 access_count，配合刚修复的 apply_count 死链。
     try:
-        from write_feedback import decay_stale_pins as _decay_pins
+        from memory_os.runtime.write_feedback_compat import decay_stale_pins as _decay_pins
         _dp_conn = open_db()
         ensure_schema(_dp_conn)
         _dp_result = _decay_pins(_dp_conn, project=project)
@@ -5795,7 +5810,7 @@ def main():
     # OS 类比：Linux Slab Allocator — 合并碎片化对象，提升内存利用率
     # 人的记忆类比：Chunking (Miller 1956) — 将相关小记忆片段合并为有意义组块
     try:
-        from store_vfs import coalesce_small_chunks as _coalesce
+        from memory_os.store.vfs_compat import coalesce_small_chunks as _coalesce
         _coal_conn = open_db()
         ensure_schema(_coal_conn)
         _coal_n = _coalesce(_coal_conn, project=project)
@@ -5813,7 +5828,7 @@ def main():
     # 人的记忆类比：语义网络（semantic network）— 知识节点间的有向关联边
     try:
         if written_chunk_ids and len(written_chunk_ids) >= 2:
-            from store_graph import (add_cooccurrence_edges, infer_edges_from_summaries,
+            from memory_os.store.graph import (add_cooccurrence_edges, infer_edges_from_summaries,
                                       ensure_graph_schema)
             _graph_conn = open_db()
             ensure_graph_schema(_graph_conn)
@@ -5844,7 +5859,7 @@ def main():
     # 人的记忆类比：Cowan (2001) focus of attention — 当前正在处理的主题留在焦点中
     try:
         if session_id and session_id != "unknown" and text:
-            from store_focus import ensure_focus_schema, update_focus
+            from memory_os.store.focus import ensure_focus_schema, update_focus
             _focus_conn = open_db()
             ensure_focus_schema(_focus_conn)
             # 从当前对话文本（最后 500 字）提取焦点关键词
@@ -5860,7 +5875,7 @@ def main():
     # 实现：同 session 中时间相邻（<5min）写入的 chunk 之间建立 COOCCURS 弱边
     try:
         if written_chunk_ids and session_id and session_id != "unknown":
-            from store_graph import add_edge, EdgeType, ensure_graph_schema
+            from memory_os.store.graph import add_edge, EdgeType, ensure_graph_schema
             _tp_conn = open_db()
             ensure_graph_schema(_tp_conn)
             # 查询同 session 中在本次写入之前 5 分钟内写入的 chunk
@@ -5911,9 +5926,9 @@ def main():
     try:
         _todo_cwd = hook_input.get("cwd", "") or os.environ.get("CLAUDE_CWD", "")
         if _todo_cwd:
-            from store_todos import (extract_todos_from_text, add_todo,
+            from memory_os.store.todos import (extract_todos_from_text, add_todo,
                                      ensure_todos_schema)
-            from store_workspace import _workspace_id as _ws_id_todo
+            from memory_os.store.workspace import _workspace_id as _ws_id_todo
             _todo_ws_id = _ws_id_todo(_todo_cwd)
             _todo_conn = open_db()
             ensure_todos_schema(_todo_conn)
@@ -5936,7 +5951,7 @@ def main():
     # 人的记忆类比：情节记忆（Episodic Memory）— 带时间戳的行为事件，
     #   下次 SessionStart 时可注入"上次在这里做了什么"。
     try:
-        from store_episodes import (write_episode, build_episode_summary,
+        from memory_os.store.episodes import (write_episode, build_episode_summary,
                                     ensure_episodes_schema)
         _ep_conn = open_db()
         ensure_episodes_schema(_ep_conn)
@@ -5988,7 +6003,7 @@ def main():
         try:
             _ep_cwd = hook_input.get("cwd", "") or os.environ.get("CLAUDE_CWD", "")
             if _ep_cwd:
-                from store_workspace import _workspace_id as _ws_id_fn
+                from memory_os.store.workspace import _workspace_id as _ws_id_fn
                 _ep_ws_id = _ws_id_fn(_ep_cwd)
         except Exception:
             pass
@@ -6020,7 +6035,7 @@ def main():
     #   下次会话开始时自动注入上下文 → Claude 无需每次重新检索。
     try:
         if _sysctl("loader.restore_working_set"):
-            from agent_working_set import registry as _ws_registry
+            from memory_os.runtime.workspace.agent_working_set_compat import registry as _ws_registry
             _ws_obj = _ws_registry.get(session_id) if _ws_registry else None
             if _ws_obj is not None:
                 _ws_chunks = _ws_obj.list_chunks()
@@ -6115,7 +6130,7 @@ def main():
                 pass
 
         if _rc_injected_ids and text:
-            from store_vfs import reconsolidate as _reconsolidate
+            from memory_os.store.vfs_compat import reconsolidate as _reconsolidate
             _rc_conn = open_db()
             ensure_schema(_rc_conn)
             _rc_n = _reconsolidate(
@@ -6275,7 +6290,7 @@ def _promote_to_global(conn, project: str, session_id: str) -> int:
             # ── iter541: inode_permission — 全局晋升路径写入门控 ──
             # 此前直接 INSERT 绕过 _vfs_write_protect()，导致碎片泄漏
             try:
-                from store_vfs import _vfs_write_protect
+                from memory_os.store.vfs_compat import _vfs_write_protect
                 if _vfs_write_protect(summary):
                     continue
             except ImportError:

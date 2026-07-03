@@ -99,7 +99,7 @@ def test_exact_duplicates_removed():
                 access_count=1)
     conn.commit()
 
-    from store_mm import proactive_compaction
+    from memory_os.store.mm import proactive_compaction
     result = proactive_compaction(conn)
 
     test("triggered=True", result["triggered"])
@@ -136,7 +136,7 @@ def test_degenerate_demoted():
                 access_count=1)
     conn.commit()
 
-    from store_mm import proactive_compaction
+    from memory_os.store.mm import proactive_compaction
     result = proactive_compaction(conn)
 
     test("triggered=True", result["triggered"])
@@ -167,7 +167,7 @@ def test_mlock_protected():
                 access_count=0)
     conn.commit()
 
-    from store_mm import proactive_compaction
+    from memory_os.store.mm import proactive_compaction
     result = proactive_compaction(conn)
 
     mlock_exists = conn.execute(
@@ -193,7 +193,7 @@ def test_below_threshold():
                 access_count=1)
     conn.commit()
 
-    from store_mm import proactive_compaction
+    from memory_os.store.mm import proactive_compaction
     result = proactive_compaction(conn)
 
     test("triggered=False", not result["triggered"])
@@ -212,10 +212,10 @@ def test_disabled():
                 "same content that repeats", access_count=0)
     conn.commit()
 
-    from config import sysctl_set
+    from memory_os.config.sysctl import sysctl_set
     sysctl_set("proactive_compaction.enabled", False)
 
-    from store_mm import proactive_compaction
+    from memory_os.store.mm import proactive_compaction
     result = proactive_compaction(conn)
     test("not triggered when disabled", not result["triggered"])
 
@@ -235,10 +235,10 @@ def test_max_actions_limit():
                 access_count=0)
     conn.commit()
 
-    from config import sysctl_set
+    from memory_os.config.sysctl import sysctl_set
     sysctl_set("proactive_compaction.max_actions_per_scan", 3)
 
-    from store_mm import proactive_compaction
+    from memory_os.store.mm import proactive_compaction
     result = proactive_compaction(conn)
 
     total_actions = result["exact_dups_deleted"] + result["degenerate_demoted"]
@@ -265,7 +265,7 @@ def test_accessed_not_demoted():
                 f"退化 chunk", access_count=0)
     conn.commit()
 
-    from store_mm import proactive_compaction
+    from memory_os.store.mm import proactive_compaction
     result = proactive_compaction(conn)
 
     row = conn.execute("SELECT oom_adj FROM memory_chunks WHERE id='degen-accessed'").fetchone()
@@ -279,7 +279,7 @@ def test_accessed_not_demoted():
 def test_empty_db():
     print("\n[Test 8] Empty DB → no crash")
     conn = _fresh_conn()
-    from store_mm import proactive_compaction
+    from memory_os.store.mm import proactive_compaction
     result = proactive_compaction(conn)
     test("no crash, triggered=False", not result["triggered"])
     conn.close()
@@ -307,7 +307,7 @@ def test_frag_index_calculation():
                 access_count=1)
     conn.commit()
 
-    from store_mm import proactive_compaction
+    from memory_os.store.mm import proactive_compaction
     result = proactive_compaction(conn)
 
     # frag = (3 degen + 2 dup extras) / 10 = 0.5
@@ -335,7 +335,7 @@ def test_different_types_not_dup():
                 f"退化", access_count=0)
     conn.commit()
 
-    from store_mm import proactive_compaction
+    from memory_os.store.mm import proactive_compaction
     result = proactive_compaction(conn)
 
     both_exist = conn.execute(
@@ -357,7 +357,7 @@ def test_performance():
                 access_count=(0 if i % 2 == 0 else 1))
     conn.commit()
 
-    from store_mm import proactive_compaction
+    from memory_os.store.mm import proactive_compaction
     t0 = time.time()
     result = proactive_compaction(conn)
     elapsed = (time.time() - t0) * 1000
@@ -380,7 +380,7 @@ def test_idempotent():
                 f"unique content for normal chunk {i}" * 3, access_count=1)
     conn.commit()
 
-    from store_mm import proactive_compaction
+    from memory_os.store.mm import proactive_compaction
     r1 = proactive_compaction(conn)
     test("first run triggered", r1["triggered"])
     test("first run deleted dups", r1["exact_dups_deleted"] > 0)
@@ -395,7 +395,7 @@ def test_idempotent():
 # ═══════════════════════════════════════════════════════════════════════════════
 def test_config_registered():
     print("\n[Test 13] Config tunables registered")
-    from config import get as _cfg
+    from memory_os.config.sysctl import get as _cfg
     test("enabled registered", _cfg("proactive_compaction.enabled") is not None)
     test("frag_threshold registered", _cfg("proactive_compaction.frag_threshold") is not None)
     test("demote_oom_adj registered", _cfg("proactive_compaction.demote_oom_adj") is not None)
@@ -415,7 +415,7 @@ def test_short_content_ignored():
                 f"enough content to not be degenerate {i}" * 3, access_count=1)
     conn.commit()
 
-    from store_mm import proactive_compaction
+    from memory_os.store.mm import proactive_compaction
     result = proactive_compaction(conn)
 
     test("no exact_dups from tiny content", result["exact_dups_deleted"] == 0)
@@ -451,7 +451,7 @@ def test_production_simulation():
 
     conn.commit()
 
-    from store_mm import proactive_compaction
+    from memory_os.store.mm import proactive_compaction
     result = proactive_compaction(conn)
 
     test("triggered", result["triggered"])
@@ -479,7 +479,7 @@ def test_fts5_cleaned():
                 f"unique content paragraph {i}" * 3, access_count=1)
     conn.commit()
 
-    from store_mm import proactive_compaction
+    from memory_os.store.mm import proactive_compaction
     proactive_compaction(conn)
 
     fts_count = conn.execute(

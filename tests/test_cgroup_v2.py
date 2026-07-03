@@ -29,8 +29,8 @@ os.environ["MEMORY_OS_BALLOON_GLOBAL_POOL"] = "200"
 _ROOT = Path(__file__).parent
 sys.path.insert(0, str(_ROOT))
 
-import tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
-from store import open_db, ensure_schema, insert_chunk, cgroup_throttle_check, get_project_chunk_count
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: F401 — tmpfs isolation (iter54), must precede store import
+from memory_os.store.api import open_db, ensure_schema, insert_chunk, cgroup_throttle_check, get_project_chunk_count
 
 
 def _setup_db(chunk_count: int = 0, project: str = "test_cgroup_v2") -> sqlite3.Connection:

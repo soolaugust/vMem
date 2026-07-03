@@ -39,10 +39,10 @@ from pathlib import Path
 # Unified Scorer（迭代20）
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
-from scorer import retention_score as _unified_retention_score
-from scorer import recency_score as _unified_recency_score
-from scorer import access_frequency as _unified_access_freq
-from store import open_db, ensure_schema, delete_chunks as store_delete_chunks, get_chunk_count
+from memory_os.core.scorer import retention_score as _unified_retention_score
+from memory_os.core.scorer import recency_score as _unified_recency_score
+from memory_os.core.scorer import access_frequency as _unified_access_freq
+from memory_os.store.api import open_db, ensure_schema, delete_chunks as store_delete_chunks, get_chunk_count
 
 DB = Path.home() / ".claude" / "memory-os" / "store.db"
 BAK = DB.parent / "store.db.eviction.bak"

@@ -25,7 +25,7 @@ os.environ["MEMORY_OS_DB"] = os.path.join(_tmpdir, "store.db")
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from store_mm import (
+from memory_os.store.mm import (
     timer_slack_load, timer_slack_should_skip,
     timer_slack_report, timer_slack_tick, timer_slack_save,
     timer_slack_stats, _CLOCK_REALTIME_SUBSYSTEMS, _TIMER_SLACK_FILE,

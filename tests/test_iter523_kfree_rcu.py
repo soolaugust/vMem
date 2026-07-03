@@ -1,14 +1,14 @@
 """iter523: kfree_rcu — Deferred Cross-Project Zombie Reclaim tests."""
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import tmpfs  # noqa: E402, F401 — test isolation (must precede store imports)
+import memory_os.runtime.tmpfs_compat as tmpfs  # noqa: E402, F401 — test isolation (must precede store imports)
 
 import sqlite3
 import time
 import pytest
 
-from store_mm import kfree_rcu, dmesg_log, DMESG_INFO
-from store_vfs import open_db, ensure_schema, delete_chunks
+from memory_os.store.mm import kfree_rcu, dmesg_log, DMESG_INFO
+from memory_os.store.vfs_compat import open_db, ensure_schema, delete_chunks
 
 
 def _setup_db():
