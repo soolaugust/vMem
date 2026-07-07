@@ -30,7 +30,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from context_governor import prompt_text  # noqa: E402
-from lib.context_pressure import should_shed_optional_context  # noqa: E402
+from lib.context_pressure import enforce_additional_context, should_shed_optional_context  # noqa: E402
 
 MAX_NOTICE_LEN = 150
 
@@ -96,12 +96,15 @@ def main():
             "[省钱路由] 此任务偏简单/机械。建议本轮用 /effort low 减少推理深度，"
             "或纯机械活儿分派 Task(model=haiku，约 1/10 价)。注意 /fast 更贵不省钱。"
         )
-        print(json.dumps({
-            "hookSpecificOutput": {
-                "hookEventName": "UserPromptSubmit",
-                "additionalContext": notice[:MAX_NOTICE_LEN],
-            }
-        }, ensure_ascii=False))
+        output = enforce_additional_context(
+            hook_input,
+            notice,
+            producer="effort_router",
+            hook_event_name="UserPromptSubmit",
+            max_chars=MAX_NOTICE_LEN,
+        )
+        if output:
+            print(json.dumps(output, ensure_ascii=False))
     except Exception:
         pass  # 永远不阻塞用户输入
 

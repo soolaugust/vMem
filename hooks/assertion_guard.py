@@ -97,13 +97,25 @@ def main():
         # 健康：不输出 additionalContext，静默退出
         sys.exit(0)
 
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": "SessionStart",
-            "additionalContext": context,
+    try:
+        from context_governor import enforce_additional_context
+        output = enforce_additional_context(
+            None,
+            context,
+            producer="assertion_guard",
+            hook_event_name="SessionStart",
+            mandatory=True,
+            max_chars=1200,
+        )
+    except Exception:
+        output = {
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": context[:1200],
+            }
         }
-    }
-    print(json.dumps(output, ensure_ascii=False))
+    if output:
+        print(json.dumps(output, ensure_ascii=False))
     sys.exit(0)
 
 

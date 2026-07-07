@@ -379,12 +379,25 @@ def main():
         conn.close()
 
     if notice:
-        print(json.dumps({
-            "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
-                "additionalContext": notice,
+        try:
+            from context_governor import enforce_additional_context
+            output = enforce_additional_context(
+                None,
+                notice,
+                producer="thrashing_detector",
+                hook_event_name="PostToolUse",
+                mandatory=False,
+                max_chars=900,
+            )
+        except Exception:
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PostToolUse",
+                    "additionalContext": notice[:900],
+                }
             }
-        }, ensure_ascii=False))
+        if output:
+            print(json.dumps(output, ensure_ascii=False))
 
     sys.exit(0)
 

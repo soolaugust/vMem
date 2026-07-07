@@ -165,12 +165,28 @@ def main():
         notice = _compress_read_output(output, file_path)
 
     if notice:
-        print(json.dumps({
-            "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
-                "additionalContext": notice,
+        try:
+            hooks_dir = Path(__file__).resolve().parent
+            if str(hooks_dir) not in sys.path:
+                sys.path.insert(0, str(hooks_dir))
+            from context_governor import enforce_additional_context
+            output = enforce_additional_context(
+                None,
+                notice,
+                producer="output_compressor",
+                hook_event_name="PostToolUse",
+                mandatory=False,
+                max_chars=MAX_NOTICE_LEN,
+            )
+        except Exception:
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PostToolUse",
+                    "additionalContext": notice[:MAX_NOTICE_LEN],
+                }
             }
-        }, ensure_ascii=False))
+        if output:
+            print(json.dumps(output, ensure_ascii=False))
 
     sys.exit(0)
 

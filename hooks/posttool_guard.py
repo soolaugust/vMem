@@ -30,7 +30,14 @@ import re
 from pathlib import Path
 
 _ROOT = Path(__file__).parent.parent
+_HOOKS_DIR = Path(__file__).parent
 sys.path.insert(0, str(_ROOT))
+if str(_HOOKS_DIR) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_DIR))
+try:
+    from context_governor import enforce_additional_context
+except Exception:
+    enforce_additional_context = None
 
 MEMORY_OS_DIR = Path.home() / ".claude" / "memory-os"
 PROFILE_DB = MEMORY_OS_DIR / "tool_profile.db"
@@ -300,12 +307,24 @@ def main():
 
     if notices:
         combined = " | ".join(notices)
-        print(json.dumps({
-            "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
-                "additionalContext": combined[:600],
+        output = None
+        if enforce_additional_context is not None:
+            output = enforce_additional_context(
+                None,
+                combined,
+                producer="posttool_guard",
+                hook_event_name="PostToolUse",
+                mandatory=False,
+                max_chars=600,
+            )
+        if output is None:
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PostToolUse",
+                    "additionalContext": combined[:600],
+                }
             }
-        }, ensure_ascii=False))
+        print(json.dumps(output, ensure_ascii=False))
 
     sys.exit(0)
 

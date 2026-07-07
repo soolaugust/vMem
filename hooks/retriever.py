@@ -73,7 +73,7 @@ if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 from memory_os.config.sysctl import get as _sysctl  # ~3ms, 模块级函数依赖
 from memory_os.config.sysctl import sched_ext_match as _sched_ext_match  # 迭代47: sched_ext
-from context_governor import should_shed_optional_context
+from context_governor import enforce_additional_context, should_shed_optional_context
 from lib.context_pressure import prompt_text
 from lib.prompt_io import read_hook_input
 
@@ -6034,10 +6034,15 @@ def main():
                               f"hard_deadline: {duration_ms:.1f}ms skipped={'+'.join(deadline_skipped)}",
                               session_id=session_id, project=project)
                     # ── 迭代69+84：输出前置 + 只读连接关闭 ──
-                    print(json.dumps({"hookSpecificOutput": {
-                        "hookEventName": "UserPromptSubmit",
-                        "additionalContext": context_text}}, ensure_ascii=False))
-                    sys.stdout.flush()
+                    output = enforce_additional_context(
+                        hook_input,
+                        context_text,
+                        producer="retriever",
+                        hook_event_name="UserPromptSubmit",
+                    )
+                    if output:
+                        print(json.dumps(output, ensure_ascii=False))
+                        sys.stdout.flush()
                     conn.close()  # 关闭只读连接
                     # ── 迭代84：Write-Back Phase — 写连接批量写入 ──
                     try:
@@ -10854,12 +10859,12 @@ def main():
         _tlb_write(prompt_hash, _post_filter_hash, _get_db_mtime())  # 迭代57: TLB
         _tlb_bump_generation()  # iter583: FULL 完成后 bump generation
 
-        output = {
-            "hookSpecificOutput": {
-                "hookEventName": "UserPromptSubmit",
-                "additionalContext": context_text,
-            }
-        }
+        output = enforce_additional_context(
+            hook_input,
+            context_text,
+            producer="retriever",
+            hook_event_name="UserPromptSubmit",
+        )
 
         # ── 迭代69：Write-After-Response — 输出前置，写入后置 ──────────────
         # OS 类比：Linux write-back caching (2001, Andrew Morton)
@@ -10879,8 +10884,9 @@ def main():
         #     用户立即收到结果（~60ms），写入异步完成（进程退出前）。
         #     数据完整性不受影响：写入仍在同一进程内完成，只是顺序调整。
         # ── 迭代69+84：输出前置 + 只读连接关闭 ──
-        print(json.dumps(output, ensure_ascii=False))
-        sys.stdout.flush()  # 确保输出立即到达 Claude Code
+        if output:
+            print(json.dumps(output, ensure_ascii=False))
+            sys.stdout.flush()  # 确保输出立即到达 Claude Code
         conn.close()  # 关闭只读连接
 
         # ── 迭代84：Write-Back Phase — 写连接批量写入 ──

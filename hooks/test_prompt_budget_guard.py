@@ -87,7 +87,6 @@ def write_stdout_compacted_transcript(path: Path, before: str, after: str) -> No
                 "type": "hook_success",
                 "hookName": "SessionStart:compact",
                 "hookEvent": "SessionStart",
-                "stdout": json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart:compact"}}),
             }
         })
         + "\n"
@@ -166,7 +165,7 @@ def main() -> None:
         payload = json.loads(oversized_context.stdout)
         assert payload["decision"] == "approve"
         assert "projected request context" in payload["reason"]
-        assert "critical pressure" in payload["reason"]
+        assert "接管上下文治理" in payload["reason"] or "working-set" in payload["reason"]
         assert payload["detail"]["transcript_chars"] >= 950
         assert payload["detail"]["projected_context_chars"] >= 1052
         pressure_state = json.loads((heartbeat_dir / "memory-os" / "context_pressure_state.json").read_text(encoding="utf-8"))
@@ -222,6 +221,8 @@ def main() -> None:
         assert "downstream_reserve=30" in payload["reason"]
         pressure_state = json.loads((heartbeat_dir / "memory-os" / "context_pressure_state.json").read_text(encoding="utf-8"))
         assert pressure_state["last_pressure_level"] == "high"
+        assert (heartbeat_dir / "memory-os" / "context_mode_state.json").exists()
+        assert (heartbeat_dir / "memory-os" / "working_set" / "current.json").exists()
 
         raw_transcript = heartbeat_dir / "raw-transcript.jsonl"
         raw_transcript.write_text("not-json\n" + ("z" * 300), encoding="utf-8")
@@ -342,8 +343,6 @@ def main() -> None:
 
         marker_shapes = [
             {"hook_event_name": "PostCompact"},
-            {"hookSpecificOutput": {"hookEventName": "PostCompact"}},
-            {"attachment": {"stdout": json.dumps({"hookSpecificOutput": {"hookEventName": "PostCompact"}})}},
             '{"subtype": "compact"}',
         ]
         for index, marker in enumerate(marker_shapes):
