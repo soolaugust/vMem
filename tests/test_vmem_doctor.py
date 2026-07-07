@@ -9,11 +9,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def cli_args() -> list[str]:
+    if (ROOT / "memory_os" / "cli" / "mcp_memory_lookup.py").exists():
+        return ["-m", "memory_os.cli.mcp_memory_lookup"]
+    return [str(ROOT / "mcp_memory_lookup.py")]
+
+
 def test_vmem_doctor_json_passes(tmp_path: Path) -> None:
     env = os.environ.copy()
     env["MEMORY_OS_DIR"] = str(tmp_path / "memory-os")
     result = subprocess.run(
-        [sys.executable, str(ROOT / "mcp_memory_lookup.py"), "doctor", "--json"],
+        [sys.executable, *cli_args(), "doctor", "--json"],
         cwd=ROOT,
         env=env,
         text=True,
@@ -34,7 +40,7 @@ def test_vmem_install_repairs_settings(tmp_path: Path) -> None:
     settings = tmp_path / "settings.json"
     settings.write_text(json.dumps({"hooks": {"UserPromptSubmit": []}}, ensure_ascii=False), encoding="utf-8")
     result = subprocess.run(
-        [sys.executable, str(ROOT / "mcp_memory_lookup.py"), "install", "--settings", str(settings), "--json"],
+        [sys.executable, *cli_args(), "install", "--settings", str(settings), "--json"],
         cwd=ROOT,
         env=env,
         text=True,
@@ -51,7 +57,7 @@ def test_vmem_install_repairs_settings(tmp_path: Path) -> None:
     assert first_hook["async"] is False
 
     second = subprocess.run(
-        [sys.executable, str(ROOT / "mcp_memory_lookup.py"), "repair", "--settings", str(settings), "--json"],
+        [sys.executable, *cli_args(), "repair", "--settings", str(settings), "--json"],
         cwd=ROOT,
         env=env,
         text=True,
