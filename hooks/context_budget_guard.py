@@ -517,13 +517,25 @@ def main():
     except Exception:
         pass
 
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": "SessionStart",
-            "additionalContext": context_text,
+    try:
+        from context_governor import enforce_additional_context
+        output = enforce_additional_context(
+            None,
+            context_text,
+            producer="context_budget_guard",
+            hook_event_name="SessionStart",
+            mandatory=True,
+            max_chars=900,
+        )
+    except Exception:
+        output = {
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": context_text[:900],
+            }
         }
-    }
-    print(json.dumps(output, ensure_ascii=False))
+    if output:
+        print(json.dumps(output, ensure_ascii=False))
     sys.exit(0)
 
 

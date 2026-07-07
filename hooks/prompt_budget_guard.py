@@ -10,32 +10,51 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, TextIO, TypedDict
 
+MEMORY_OS_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE = Path(__file__).resolve().parents[3]
-if str(WORKSPACE) not in sys.path:
-    sys.path.insert(0, str(WORKSPACE))
+for import_root in (MEMORY_OS_ROOT, WORKSPACE):
+    if str(import_root) not in sys.path:
+        sys.path.insert(0, str(import_root))
 
 try:
     from harness_obs.heartbeat import record_run  # type: ignore[import-untyped]
 except Exception:  # pragma: no cover - hook must not fail if observability import breaks
     record_run = None  # type: ignore[assignment]
 
+try:
+    from memory_os.runtime.context.kernel_compat import (  # type: ignore[import-untyped]
+        build_working_set_manifest,
+        extract_transcript_pages,
+        manifest_context,
+    )
+except Exception:  # pragma: no cover - prompt guard must keep working without package imports
+    build_working_set_manifest = None  # type: ignore[assignment]
+    extract_transcript_pages = None  # type: ignore[assignment]
+    manifest_context = None  # type: ignore[assignment]
+
 from context_governor import (  # noqa: E402
     command_name,
+    enforce_additional_context,
+    format_emergency_notice,
     format_working_set_notice,
     is_local_command,
+    maybe_enter_emergency,
     prompt_text,
+    record_context_oom,
     write_context_mode,
     write_pressure_state,
+    write_rss_snapshot,
     write_working_set,
 )
 from lib.prompt_io import read_hook_input  # noqa: E402
 
 DEFAULT_PROMPT_CHAR_BUDGET = 120_000
-DEFAULT_TOTAL_WARN_CHAR_BUDGET = 420_000
-DEFAULT_TOTAL_HARD_CHAR_BUDGET = 900_000
+DEFAULT_TOTAL_WARN_CHAR_BUDGET = 240_000
+DEFAULT_TOTAL_HARD_CHAR_BUDGET = 320_000
 DEFAULT_STATIC_CONTEXT_RESERVE = 180_000
 DEFAULT_DOWNSTREAM_CONTEXT_RESERVE = 40_000
 TRANSCRIPT_TAIL_BYTES = 4_000_000
@@ -49,6 +68,14 @@ DOWNSTREAM_RESERVE_ENV = "MEMORY_OS_DOWNSTREAM_CONTEXT_RESERVE_CHARS"
 GUARD_NAME = "prompt_budget_guard"
 MEMORY_OS_DIR = Path(os.environ.get("MEMORY_OS_DIR", Path.home() / ".claude" / "memory-os")).expanduser()
 THRASHING_STATE_FILE = MEMORY_OS_DIR / "thrashing_state.json"
+TRANSCRIPT_RECLAIM_MAX_STDIO_CHARS = int(os.environ.get("MEMORY_OS_TRANSCRIPT_RECLAIM_MAX_STDIO_CHARS", "4000"))
+TRANSCRIPT_RECLAIM_MAX_CONTENT_CHARS = int(os.environ.get("MEMORY_OS_TRANSCRIPT_RECLAIM_MAX_CONTENT_CHARS", "2500"))
+TRANSCRIPT_RECLAIM_MAX_FIELD_CHARS = int(os.environ.get("MEMORY_OS_TRANSCRIPT_RECLAIM_MAX_FIELD_CHARS", "2000"))
+TRANSCRIPT_RECLAIM_MAX_RECORD_CHARS = int(os.environ.get("MEMORY_OS_TRANSCRIPT_RECLAIM_MAX_RECORD_CHARS", "32000"))
+BIG_PAYLOAD_KEYS = frozenset({
+    "old_string", "new_string", "oldString", "newString", "content", "command",
+    "stdout", "stderr", "text", "file_content",
+})
 
 
 class BudgetDetail(TypedDict):
@@ -246,6 +273,199 @@ def _transcript_context_chars(path: Path) -> int:
     return _transcript_context_chars_from_offset(path, max(0, size - TRANSCRIPT_TAIL_BYTES))
 
 
+def _hash_text(value: str) -> str:
+    digest = 2166136261
+    for char in value:
+        digest ^= ord(char)
+        digest = (digest * 16777619) & 0xFFFFFFFF
+    return f"{digest:08x}"
+
+
+def _truncate_text_field(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    head = int(limit * 0.6)
+    tail = limit - head
+    return (
+        value[:head]
+        + f"\n...[transcript-reclaim truncated {len(value) - limit} chars, hash={_hash_text(value)}]...\n"
+        + value[-tail:]
+    )
+
+
+def _sanitize_large_payload(value: Any, key: str = "", depth: int = 0) -> Any:
+    if isinstance(value, str):
+        limit = TRANSCRIPT_RECLAIM_MAX_FIELD_CHARS if key in BIG_PAYLOAD_KEYS else TRANSCRIPT_RECLAIM_MAX_FIELD_CHARS * 2
+        return _truncate_text_field(value, limit)
+    if isinstance(value, list):
+        return [_sanitize_large_payload(item, key, depth + 1) for item in value[:100]]
+    if isinstance(value, dict):
+        if depth > 8:
+            return "[transcript-reclaim truncated: max depth]"
+        return {child_key: _sanitize_large_payload(child_value, child_key, depth + 1) for child_key, child_value in value.items()}
+    return value
+
+
+def _shrink_posttool_attachment(attachment: dict[str, Any]) -> bool:
+    changed = False
+    for key, limit in (
+        ("stdout", TRANSCRIPT_RECLAIM_MAX_STDIO_CHARS),
+        ("stderr", TRANSCRIPT_RECLAIM_MAX_STDIO_CHARS),
+        ("content", TRANSCRIPT_RECLAIM_MAX_CONTENT_CHARS),
+    ):
+        value = attachment.get(key)
+        if isinstance(value, str) and len(value) > limit:
+            attachment[key] = _truncate_text_field(value, limit)
+            changed = True
+    if "response" in attachment:
+        before = json.dumps(attachment["response"], ensure_ascii=False, sort_keys=True)
+        attachment["response"] = _sanitize_large_payload(attachment["response"])
+        after = json.dumps(attachment["response"], ensure_ascii=False, sort_keys=True)
+        changed = changed or len(after) < len(before)
+    return changed
+
+
+def _shrink_message_content(entry: dict[str, Any]) -> bool:
+    message = entry.get("message")
+    if not isinstance(message, dict):
+        return False
+    content = message.get("content")
+    before = json.dumps(content, ensure_ascii=False, sort_keys=True)
+    changed = False
+    if isinstance(content, str) and len(content) > TRANSCRIPT_RECLAIM_MAX_RECORD_CHARS:
+        message["content"] = _truncate_text_field(content, TRANSCRIPT_RECLAIM_MAX_RECORD_CHARS)
+        changed = True
+    elif isinstance(content, list):
+        new_content: list[Any] = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") in {"tool_result", "text"}:
+                item = dict(item)
+                if "content" in item:
+                    item["content"] = _sanitize_large_payload(item["content"], "content")
+                if "text" in item:
+                    item["text"] = _sanitize_large_payload(item["text"], "text")
+            new_content.append(item)
+        message["content"] = new_content
+        changed = len(json.dumps(new_content, ensure_ascii=False, sort_keys=True)) < len(before)
+    return changed
+
+
+def _reclaim_entry(entry: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    before = len(json.dumps(entry, ensure_ascii=False))
+    changed = False
+    attachment = entry.get("attachment")
+    if isinstance(attachment, dict) and str(attachment.get("hookName", "")).startswith("PostToolUse"):
+        changed = _shrink_posttool_attachment(attachment) or changed
+    changed = _shrink_message_content(entry) or changed
+    encoded = json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
+    if len(encoded) > TRANSCRIPT_RECLAIM_MAX_RECORD_CHARS and isinstance(attachment, dict):
+        attachment.clear()
+        attachment.update({
+            "type": "hook_reclaimed",
+            "hookName": "PostToolUse:reclaimed",
+            "_transcript_reclaim": {
+                "original_record_chars": before,
+                "max_record_chars": TRANSCRIPT_RECLAIM_MAX_RECORD_CHARS,
+            },
+        })
+        changed = True
+    return entry, changed or len(json.dumps(entry, ensure_ascii=False)) < before
+
+
+def _append_tail_if_any(path: Path, dst: TextIO, processed_bytes: int) -> int:
+    try:
+        current_size = path.stat().st_size
+    except OSError:
+        return processed_bytes
+    if current_size <= processed_bytes:
+        return processed_bytes
+    with path.open("rb") as live:
+        live.seek(processed_bytes)
+        copied = processed_bytes
+        for raw in live:
+            copied += len(raw)
+            dst.write(raw.decode("utf-8", errors="replace"))
+        return copied
+
+
+def _append_old_inode_tail_after_replace(src: Any, path: Path, copied_bytes: int) -> int:
+    """Copy appends that landed on the old transcript inode around os.replace()."""
+    stable_rounds = 0
+    while stable_rounds < 2:
+        try:
+            old_size = os.fstat(src.fileno()).st_size
+        except OSError:
+            return copied_bytes
+        if old_size <= copied_bytes:
+            stable_rounds += 1
+            time.sleep(0.01)
+            continue
+        src.seek(copied_bytes)
+        with path.open("ab") as dst:
+            while copied_bytes < old_size:
+                chunk = src.read(min(65536, old_size - copied_bytes))
+                if not chunk:
+                    break
+                dst.write(chunk)
+                copied_bytes += len(chunk)
+        stable_rounds = 0
+    return copied_bytes
+
+
+def reclaim_transcript_context(path: Path) -> dict[str, int | str]:
+    """Shrink oversized hook attachments in-place before the next model request.
+
+    This is an automatic shrinker, not a user-visible /compact. It keeps JSONL
+    structure and semantic pointers while removing duplicated hook stdio/payloads
+    that otherwise block the user with API 400.
+    """
+    try:
+        old_size = path.stat().st_size
+    except OSError:
+        return {"changed_records": 0, "old_bytes": 0, "new_bytes": 0, "saved_bytes": 0, "backup": ""}
+
+    backup = path.with_suffix(path.suffix + f".bak-auto-reclaim-{int(time.time())}")
+    tmp = path.with_suffix(path.suffix + f".tmp-auto-reclaim-{os.getpid()}")
+    changed_records = 0
+    processed_bytes = 0
+    try:
+        backup.write_bytes(path.read_bytes())
+        with path.open("rb") as src, tmp.open("w", encoding="utf-8") as dst:
+            for raw in src:
+                processed_bytes += len(raw)
+                line = raw.decode("utf-8", errors="replace")
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    dst.write(line)
+                    continue
+                if not isinstance(entry, dict):
+                    dst.write(line)
+                    continue
+                entry, changed = _reclaim_entry(entry)
+                if changed:
+                    changed_records += 1
+                dst.write(json.dumps(entry, ensure_ascii=False, separators=(",", ":")) + "\n")
+            processed_bytes = _append_tail_if_any(path, dst, processed_bytes)
+        with path.open("rb") as old_inode:
+            os.replace(tmp, path)
+            processed_bytes = _append_old_inode_tail_after_replace(old_inode, path, processed_bytes)
+        new_size = path.stat().st_size
+        return {
+            "changed_records": changed_records,
+            "old_bytes": old_size,
+            "new_bytes": new_size,
+            "saved_bytes": max(0, old_size - new_size),
+            "backup": str(backup),
+        }
+    except OSError:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return {"changed_records": 0, "old_bytes": old_size, "new_bytes": old_size, "saved_bytes": 0, "backup": str(backup)}
+
+
 def _session_id(data: dict[str, Any]) -> str:
     value = data.get("session_id") or os.environ.get("CLAUDE_SESSION_ID", "")
     return value if isinstance(value, str) else ""
@@ -309,10 +529,39 @@ def main() -> None:
     data = _read_input()
     prompt = _prompt_text(data)
     if _is_local_slash_command(prompt):
-        _record(True, f"skipped local command {command_name(prompt)}")
+        cmd = command_name(prompt)
+        if cmd in {"/compact", "/clear"}:
+            write_pressure_state("low", f"rescue command {cmd} reset context pressure")
+            write_context_mode("normal", f"rescue command {cmd} reset context mode")
+        _record(True, f"skipped local command {cmd}")
         sys.exit(0)
 
     detail = _budget_detail(data, prompt)
+    transcript = _transcript_path(data)
+    reclaim_result: dict[str, int | str] | None = None
+    if transcript and detail["projected_context_chars"] > detail["total_context_warn_chars"]:
+        reclaim_result = reclaim_transcript_context(transcript)
+        if int(reclaim_result.get("saved_bytes", 0) or 0) > 0:
+            detail = _budget_detail(data, prompt)
+    manifest_notice = ""
+    if transcript and build_working_set_manifest is not None and manifest_context is not None:
+        try:
+            if extract_transcript_pages is not None and detail["projected_context_chars"] > detail["total_context_warn_chars"]:
+                extraction = extract_transcript_pages(transcript, max_lines=400)
+                manifest_notice = manifest_context(extraction.manifest)
+            else:
+                manifest_notice = manifest_context(build_working_set_manifest(prompt=prompt))
+        except Exception:
+            manifest_notice = ""
+    snapshot = write_rss_snapshot(dict(detail), prompt=prompt, transcript_path=transcript)
+    if reclaim_result:
+        snapshot["transcript_reclaim"] = reclaim_result
+    if manifest_notice:
+        snapshot["working_set_manifest_context_chars"] = len(manifest_notice)
+
+    trace_id = ""
+    if "trace_id:" in prompt:
+        trace_id = prompt.rsplit("trace_id:", 1)[-1].strip().split()[0].strip("，,。.;")
 
     if detail["prompt_chars"] > detail["prompt_budget"]:
         reason = (
@@ -338,57 +587,91 @@ def main() -> None:
             f"chars={detail['projected_context_chars']} exceeds hard={detail['total_context_hard_chars']}"
         )
         write_pressure_state("critical", pressure_reason)
-        write_context_mode("working_set", pressure_reason)
+        if trace_id:
+            record_context_oom(trace_id, reason="user reported context window 400 during hard overflow", snapshot=snapshot)
+        emergency = maybe_enter_emergency(dict(detail), reason=pressure_reason, trace_id=trace_id)
+        if not emergency:
+            write_context_mode("working_set", pressure_reason)
         working_set = write_working_set(prompt, _transcript_path(data))
-        notice = format_working_set_notice(working_set)
+        notice = format_emergency_notice(dict(detail)) if emergency else format_working_set_notice(working_set)
+        if manifest_notice:
+            notice = (notice + "\n" + manifest_notice)[:6000]
         reason = (
             "[prompt_budget_guard] CRITICAL: projected request context "
             f"chars={detail['projected_context_chars']} exceeds hard budget={detail['total_context_hard_chars']} "
             f"(warn={detail['total_context_warn_chars']}, transcript={detail['transcript_chars']}, "
             f"prompt={detail['prompt_chars']}, static_reserve={detail['static_reserve_chars']}, "
             f"downstream_reserve={detail['downstream_context_reserve_chars']}). "
-            "不阻断用户输入；已自动进入 working-set 模式并压制可选上下文注入。"
+            f"已自动回收 transcript saved_bytes={int((reclaim_result or {}).get('saved_bytes', 0) or 0)}；"
+            "不阻断用户输入；已强制接管上下文治理并压制可选上下文注入。"
         )
         _record(
             True,
             "critical working_set reclaim "
             f"chars={detail['projected_context_chars']} hard={detail['total_context_hard_chars']}",
         )
-        sys.stdout.write(json.dumps({
+        output = {
             "decision": "approve",
             "reason": reason,
             "detail": detail,
-            "hookSpecificOutput": {
-                "hookEventName": "UserPromptSubmit",
-                "additionalContext": notice,
-            },
-        }, ensure_ascii=False))
+            "transcript_reclaim": reclaim_result or {},
+        }
+        governed = enforce_additional_context(
+            data,
+            notice,
+            producer="prompt_budget_guard",
+            hook_event_name="UserPromptSubmit",
+            mandatory=True,
+        )
+        if governed:
+            output.update(governed)
+        sys.stdout.write(json.dumps(output, ensure_ascii=False))
         sys.exit(0)
 
     if detail["projected_context_chars"] > detail["total_context_warn_chars"]:
+        pressure_reason = (
+            "projected context "
+            f"chars={detail['projected_context_chars']} exceeds warn={detail['total_context_warn_chars']}"
+        )
+        write_pressure_state("high", pressure_reason)
+        write_context_mode("working_set", pressure_reason)
+        working_set = write_working_set(prompt, _transcript_path(data))
+        notice = format_working_set_notice(working_set)
+        if manifest_notice:
+            notice = (notice + "\n" + manifest_notice)[:6000]
         reason = (
             "[prompt_budget_guard] WARN: projected request context "
             f"chars={detail['projected_context_chars']} exceeds warning budget={detail['total_context_warn_chars']} "
             f"(hard={detail['total_context_hard_chars']}, transcript={detail['transcript_chars']}, "
             f"prompt={detail['prompt_chars']}, static_reserve={detail['static_reserve_chars']}, "
             f"downstream_reserve={detail['downstream_context_reserve_chars']}). "
-            "当前会话偏大，本次不阻断；可在逻辑断点整理上下文。"
+            "已提前进入 working-set 模式并压制可选上下文注入，按 kswapd 水位治理无感降载。"
         )
-        pressure_reason = (
-            "projected context "
-            f"chars={detail['projected_context_chars']} exceeds warn={detail['total_context_warn_chars']}"
-        )
-        write_pressure_state("high", pressure_reason)
-        write_context_mode("pressure", pressure_reason)
         _record(
             True,
-            "warn projected context "
+            "warn proactive working_set reclaim "
             f"chars={detail['projected_context_chars']} warn={detail['total_context_warn_chars']} "
             f"hard={detail['total_context_hard_chars']}",
         )
-        sys.stdout.write(json.dumps({"decision": "approve", "reason": reason, "detail": detail}, ensure_ascii=False))
+        output = {
+            "decision": "approve",
+            "reason": reason,
+            "detail": detail,
+        }
+        governed = enforce_additional_context(
+            data,
+            notice,
+            producer="prompt_budget_guard",
+            hook_event_name="UserPromptSubmit",
+            mandatory=True,
+        )
+        if governed:
+            output.update(governed)
+        sys.stdout.write(json.dumps(output, ensure_ascii=False))
         sys.exit(0)
 
+    write_pressure_state("low", "prompt/context within budget")
+    write_context_mode("normal", "prompt/context within budget")
     _record(
         True,
         "prompt/context within budget "

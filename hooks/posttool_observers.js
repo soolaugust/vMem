@@ -25,6 +25,63 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const MAX_STDIN = 512 * 1024;
+const MAX_FIELD_CHARS = 2000;
+const MAX_TOTAL_CHARS = 64 * 1024;
+const LARGE_TEXT_KEYS = new Set([
+  'old_string', 'new_string', 'content', 'command', 'stdout', 'stderr',
+  'oldString', 'newString', 'file_content', 'text'
+]);
+
+function hashString(value) {
+  let hash = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
+}
+
+function truncateText(value, limit = MAX_FIELD_CHARS) {
+  if (typeof value !== 'string' || value.length <= limit) return value;
+  const head = Math.floor(limit * 0.6);
+  const tail = limit - head;
+  return `${value.slice(0, head)}\n...[truncated ${value.length - limit} chars, hash=${hashString(value)}]...\n${value.slice(-tail)}`;
+}
+
+function sanitizeForObserver(value, key = '', depth = 0) {
+  if (typeof value === 'string') {
+    return LARGE_TEXT_KEYS.has(key) ? truncateText(value) : truncateText(value, MAX_FIELD_CHARS * 2);
+  }
+  if (!value || typeof value !== 'object') return value;
+  if (depth > 8) return '[truncated: max depth]';
+  if (Array.isArray(value)) {
+    return value.slice(0, 100).map((item) => sanitizeForObserver(item, key, depth + 1));
+  }
+  const out = {};
+  for (const [childKey, childValue] of Object.entries(value)) {
+    out[childKey] = sanitizeForObserver(childValue, childKey, depth + 1);
+  }
+  return out;
+}
+
+function sanitizeRaw(raw) {
+  try {
+    const parsed = JSON.parse(raw);
+    const sanitized = sanitizeForObserver(parsed);
+    let encoded = JSON.stringify(sanitized);
+    if (encoded.length > MAX_TOTAL_CHARS) {
+      sanitized._observer_truncated = {
+        original_chars: raw.length,
+        sanitized_chars: encoded.length,
+        max_chars: MAX_TOTAL_CHARS,
+      };
+      encoded = JSON.stringify(sanitized).slice(0, MAX_TOTAL_CHARS);
+    }
+    return encoded;
+  } catch (_) {
+    return raw.substring(0, Math.min(MAX_STDIN, MAX_TOTAL_CHARS));
+  }
+}
 
 // 截图 GC: 工具调用后自动删除截图文件，防止 context 膨胀
 // 匹配 browser_take_screenshot 保存的文件
@@ -53,11 +110,13 @@ async function main() {
   for await (const chunk of process.stdin) {
     chunks.push(chunk);
   }
-  const raw = Buffer.concat(chunks).toString('utf8').substring(0, MAX_STDIN);
+  const rawFull = Buffer.concat(chunks).toString('utf8');
+  const rawForLocalGuards = rawFull.substring(0, MAX_STDIN);
+  const rawForObservers = sanitizeRaw(rawFull);
 
-  // L2 防御: 截图 GC（同步，优先执行）
+  // L2 防御: 截图 GC（同步，优先执行；用原始输入，避免裁剪掉 filename）
   try {
-    const data = JSON.parse(raw);
+    const data = JSON.parse(rawForLocalGuards);
     const toolName = data.tool_name || data.toolName || '';
     const toolInput = data.tool_input || {};
     screenshotGC(toolName, toolInput);
@@ -79,7 +138,7 @@ async function main() {
 
   // Dispatch snarc if available
   if (fs.existsSync(snarcScript)) {
-    observers.push(dispatchNode(snarcScript, raw, 5000));
+    observers.push(dispatchNode(snarcScript, rawForObservers, 5000));
   }
 
   // Dispatch continuous-learning observe if ECC available
@@ -87,7 +146,7 @@ async function main() {
     observers.push(dispatchShell(
       observeRunner,
       ['post:observe', 'skills/continuous-learning-v2/hooks/observe.sh', 'standard,strict'],
-      raw,
+      rawForObservers,
       10000
     ));
   }

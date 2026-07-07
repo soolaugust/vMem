@@ -2337,13 +2337,25 @@ def main():
     if _handoff_inject:
         context_text = _handoff_inject + "\n\n" + context_text
 
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": "SessionStart",
-            "additionalContext": context_text,
+    try:
+        from hooks.context_governor import enforce_additional_context
+        output = enforce_additional_context(
+            None,
+            context_text,
+            producer="loader",
+            hook_event_name="SessionStart",
+            mandatory=False,
+            max_chars=1200,
+        )
+    except Exception:
+        output = {
+            "hookSpecificOutput": {
+                "hookEventName": "SessionStart",
+                "additionalContext": context_text[:1200],
+            }
         }
-    }
-    print(json.dumps(output, ensure_ascii=False))
+    if output:
+        print(json.dumps(output, ensure_ascii=False))
     sys.exit(0)
 
 

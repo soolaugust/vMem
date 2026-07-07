@@ -34,6 +34,14 @@ import re
 from pathlib import Path
 from datetime import datetime, timezone
 
+_HOOKS_DIR = Path(__file__).parent
+if str(_HOOKS_DIR) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_DIR))
+try:
+    from context_governor import enforce_additional_context
+except Exception:
+    enforce_additional_context = None
+
 MEMORY_OS_DIR = Path.home() / ".claude" / "memory-os"
 PROFILE_DB = MEMORY_OS_DIR / "tool_profile.db"
 
@@ -196,12 +204,23 @@ def main():
         conn.close()
 
         if is_ineffective:
-            print(json.dumps({
-                "hookSpecificOutput": {
-                    "hookEventName": "PostToolUse",
-                    "additionalContext": ineffective_msg,
+            output = None
+            if enforce_additional_context is not None:
+                output = enforce_additional_context(
+                    None,
+                    ineffective_msg,
+                    producer="tool_profiler",
+                    hook_event_name="PostToolUse",
+                    max_chars=600,
+                )
+            if output is None:
+                output = {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PostToolUse",
+                        "additionalContext": ineffective_msg[:600],
+                    }
                 }
-            }, ensure_ascii=False))
+            print(json.dumps(output, ensure_ascii=False))
 
     except Exception:
         pass  # 永远不阻塞工具执行
