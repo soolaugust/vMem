@@ -27,7 +27,11 @@ PRESSURE_LEVELS = frozenset({"high", "critical"})
 
 CONTEXT_MODE_STATE_FILE = MEMORY_OS_DIR / "context_mode_state.json"
 WORKING_SET_FILE = MEMORY_OS_DIR / "working_set" / "current.json"
+CONTEXT_RSS_SNAPSHOT_FILE = MEMORY_OS_DIR / "context_rss_snapshot.json"
+CONTEXT_OOM_EVENTS_FILE = MEMORY_OS_DIR / "context_oom_events.jsonl"
 DEFAULT_WORKING_SET_MAX_AGE_SECS = 1800
+EMERGENCY_MAX_AGE_SECS = 3600
+EMERGENCY_NOTICE_MAX_CHARS = 700
 
 
 @dataclass(frozen=True)
@@ -153,9 +157,73 @@ def should_shed_optional_context(
     """Return True when optional additionalContext producers should stay silent."""
     if data is not None and is_rescue_command(prompt_text(data)):
         return False
-    if read_context_mode(max_age_secs=max_age_secs).active:
+    if state_file is None and read_context_mode(max_age_secs=max_age_secs).active:
         return True
     return read_pressure_state(state_file=state_file, max_age_secs=max_age_secs).active
+
+
+def should_force_takeover(data: dict[str, Any] | None = None) -> bool:
+    """Return True when the context kernel must hard-govern without blocking input."""
+    if data is not None and is_rescue_command(prompt_text(data)):
+        return False
+    mode = read_context_mode(max_age_secs=EMERGENCY_MAX_AGE_SECS)
+    return mode.active and mode.mode in {"working_set", "emergency"}
+
+
+def _truncate_text(text: str, max_chars: int) -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[: max(0, max_chars - 1)] + "…"
+
+
+def enforce_additional_context(
+    data: dict[str, Any] | None,
+    text: str,
+    *,
+    producer: str,
+    hook_event_name: str,
+    max_chars: int | None = None,
+    mandatory: bool = False,
+) -> dict[str, Any] | None:
+    """Apply global context-governor policy to an additionalContext producer.
+
+    This never blocks user input. Under pressure it either sheds optional context,
+    truncates mandatory notices, or replaces them with a tiny takeover notice.
+    """
+    if not text:
+        return None
+    mode = read_context_mode(max_age_secs=EMERGENCY_MAX_AGE_SECS)
+    pressure = read_pressure_state()
+    rescue = data is not None and is_rescue_command(prompt_text(data))
+    active_mode = mode.mode if mode.active else "normal"
+
+    if not rescue:
+        if active_mode == "emergency" and not mandatory:
+            return None
+        if active_mode == "working_set" and not mandatory:
+            return None
+        if pressure.active and not mandatory:
+            return None
+
+    limit = max_chars
+    if active_mode == "emergency":
+        limit = min(limit or EMERGENCY_NOTICE_MAX_CHARS, EMERGENCY_NOTICE_MAX_CHARS)
+    elif active_mode == "working_set":
+        limit = min(limit or 1200, 1200)
+    elif limit is None:
+        limit = len(text)
+
+    governed = _truncate_text(text, limit)
+    if active_mode == "emergency" and mandatory:
+        governed = _truncate_text(f"[context_kernel:emergency:{producer}] {governed}", limit)
+
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": hook_event_name,
+            "additionalContext": governed,
+        }
+    }
+
 
 def write_context_mode(
     mode: str,
@@ -164,7 +232,7 @@ def write_context_mode(
 ) -> None:
     """Persist context-kernel mode so all context producers share one state."""
     normalized = mode.lower().strip()
-    if normalized not in {"normal", "pressure", "working_set"}:
+    if normalized not in {"normal", "pressure", "working_set", "emergency"}:
         normalized = "normal"
     path = state_file or CONTEXT_MODE_STATE_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -206,9 +274,100 @@ def read_context_mode(
         mode=mode,
         last_seen_at=last_seen_at,
         age_secs=age,
-        active=mode in {"pressure", "working_set"} and age <= max_age,
+        active=mode in {"pressure", "working_set", "emergency"} and age <= max_age,
         reason=str(state.get("reason", "")),
     )
+
+
+def write_rss_snapshot(
+    detail: dict[str, Any],
+    *,
+    prompt: str = "",
+    transcript_path: Path | None = None,
+    trace_id: str = "",
+    snapshot_file: Path | None = None,
+) -> dict[str, Any]:
+    """Persist the latest request resident-set estimate for OOM postmortem."""
+    path = snapshot_file or CONTEXT_RSS_SNAPSHOT_FILE
+    payload = {
+        "schema_version": 1,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "trace_id": trace_id,
+        "prompt_preview": prompt[:240],
+        "transcript_path": str(transcript_path) if transcript_path else "",
+        "mode": read_context_mode(max_age_secs=EMERGENCY_MAX_AGE_SECS).mode,
+        "pressure": read_pressure_state().level,
+        **detail,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return payload
+
+
+def record_context_oom(
+    trace_id: str,
+    *,
+    reason: str,
+    snapshot: dict[str, Any] | None = None,
+    events_file: Path | None = None,
+    mode_state_file: Path | None = None,
+) -> dict[str, Any]:
+    """Append an OOM-style report and enter emergency context mode."""
+    path = events_file or CONTEXT_OOM_EVENTS_FILE
+    if snapshot is None:
+        try:
+            snapshot = json.loads(CONTEXT_RSS_SNAPSHOT_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            snapshot = {}
+    event = {
+        "schema_version": 1,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "trace_id": trace_id,
+        "reason": reason,
+        "mode_before": read_context_mode(max_age_secs=EMERGENCY_MAX_AGE_SECS).mode,
+        "projected_context_chars": snapshot.get("projected_context_chars", 0),
+        "transcript_chars": snapshot.get("transcript_chars", 0),
+        "prompt_chars": snapshot.get("prompt_chars", 0),
+        "action": "entered_emergency",
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(event, ensure_ascii=False) + "\n")
+    write_context_mode("emergency", f"context OOM trace_id={trace_id}: {reason}", state_file=mode_state_file)
+    return event
+
+
+def maybe_enter_emergency(
+    detail: dict[str, Any],
+    *,
+    reason: str,
+    trace_id: str = "",
+    hard_ratio: float = 1.25,
+) -> bool:
+    """Escalate repeated/severe pressure to emergency without blocking input."""
+    projected = int(detail.get("projected_context_chars", 0) or 0)
+    hard = int(detail.get("total_context_hard_chars", 0) or 0)
+    current = read_context_mode(max_age_secs=EMERGENCY_MAX_AGE_SECS)
+    if current.active and current.mode == "emergency":
+        return True
+    if hard > 0 and projected >= int(hard * hard_ratio):
+        record_context_oom(trace_id, reason=reason, snapshot=detail)
+        return True
+    if current.active and current.mode == "working_set" and projected > hard > 0:
+        record_context_oom(trace_id, reason=f"working_set still over hard: {reason}", snapshot=detail)
+        return True
+    return False
+
+
+def format_emergency_notice(detail: dict[str, Any] | None = None, *, max_chars: int = EMERGENCY_NOTICE_MAX_CHARS) -> str:
+    projected = int((detail or {}).get("projected_context_chars", 0) or 0)
+    hard = int((detail or {}).get("total_context_hard_chars", 0) or 0)
+    text = (
+        "[context_kernel] 已强制接管上下文治理但不阻断输入：当前会话进入 emergency vmem 模式，"
+        "所有可选上下文注入被压制，只保留最小工作集/救援提示。"
+        f" projected={projected} hard={hard}。继续提问可以执行，但建议在逻辑断点 /compact。"
+    )
+    return _truncate_text(text, max_chars)
 
 
 def _content_text(content: Any) -> str:

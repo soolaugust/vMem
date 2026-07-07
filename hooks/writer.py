@@ -21,6 +21,14 @@ from memory_os.core.utils import resolve_project_id
 from memory_os.store.api import open_db, ensure_schema, insert_chunk, get_project_chunk_count, evict_lowest_retention, kswapd_scan, dmesg_log, DMESG_INFO, DMESG_DEBUG, DMESG_WARN, already_exists, merge_similar
 from memory_os.config.sysctl import get as _sysctl  # 迭代27: sysctl Runtime Tunables
 
+_HOOKS_DIR = Path(__file__).parent
+if str(_HOOKS_DIR) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_DIR))
+try:
+    from context_governor import enforce_additional_context
+except Exception:
+    enforce_additional_context = None
+
 MEMORY_OS_DIR = Path.home() / ".claude" / "memory-os"
 LATEST_JSON = MEMORY_OS_DIR / "latest.json"
 STORE_DB = MEMORY_OS_DIR / "store.db"
@@ -493,12 +501,24 @@ def main():
     if not is_critical and _should_skip_debounce(current_tasks, next_tasks):
         # debounce 触发，但有压力通知时仍需输出
         if pressure_notice:
-            print(json.dumps({
-                "hookSpecificOutput": {
-                    "hookEventName": "UserPromptSubmit",
-                    "additionalContext": pressure_notice,
+            output = None
+            if enforce_additional_context is not None:
+                output = enforce_additional_context(
+                    hook_input,
+                    pressure_notice,
+                    producer="writer",
+                    hook_event_name="UserPromptSubmit",
+                    mandatory=True,
+                    max_chars=800,
+                )
+            if output is None:
+                output = {
+                    "hookSpecificOutput": {
+                        "hookEventName": "UserPromptSubmit",
+                        "additionalContext": pressure_notice[:800],
+                    }
                 }
-            }, ensure_ascii=False))
+            print(json.dumps(output, ensure_ascii=False))
         sys.exit(0)
 
     excluded_paths = _extract_excluded_paths(current_tasks, next_tasks)
@@ -580,12 +600,24 @@ def main():
                       session_id=session_id, project=project)
         except Exception:
             pass
-        print(json.dumps({
-            "hookSpecificOutput": {
-                "hookEventName": "UserPromptSubmit",
-                "additionalContext": pressure_notice,
+        output = None
+        if enforce_additional_context is not None:
+            output = enforce_additional_context(
+                hook_input,
+                pressure_notice,
+                producer="writer",
+                hook_event_name="UserPromptSubmit",
+                mandatory=True,
+                max_chars=800,
+            )
+        if output is None:
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "UserPromptSubmit",
+                    "additionalContext": pressure_notice[:800],
+                }
             }
-        }, ensure_ascii=False))
+        print(json.dumps(output, ensure_ascii=False))
 
     sys.exit(0)
 

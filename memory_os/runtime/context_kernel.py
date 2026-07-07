@@ -20,9 +20,21 @@ DEFAULT_READ_LIMIT_LINES = 2000
 DEFAULT_GREP_HEAD_LIMIT = 80
 PAGE_TABLE_FILE = "page_table.jsonl"
 CGROUP_STATE_FILE = "cgroup_state.json"
+WORKING_SET_MANIFEST_FILE = "working_set_manifest.json"
+DEFAULT_THREAD_BUDGETS: dict[str, int] = {
+    "main": 16_000,
+    "code": 24_000,
+    "evidence": 8_000,
+    "tools": 4_000,
+    "memory": 6_000,
+    "agents": 8_000,
+    "governance": 6_000,
+}
 
-ContextSource = Literal["Read", "Grep", "Bash", "Agent", "memory_os", "hook", "unknown"]
+ContextSource = Literal["Read", "Grep", "Bash", "Agent", "memory_os", "hook", "user", "assistant", "unknown"]
 Decision = Literal["allow", "update", "block"]
+ContextThread = Literal["main", "code", "evidence", "tools", "memory", "agents", "governance"]
+ContextPageType = Literal["register", "claim", "evidence", "tool_result", "hook_payload", "memory", "agent_join", "decision", "unknown"]
 
 HIGH_OUTPUT_BASH_RE = re.compile(
     r"\b(git\s+(diff|log|show)|pytest\b.*(-vv|\s-s\b)|python3?\s+-m\s+pytest.*(-vv|\s-s\b)|"
@@ -44,6 +56,32 @@ class ContextPage:
     access_count: int = 0
     importance: float = 0.5
     metadata: dict[str, Any] | None = None
+    thread: str = "tools"
+    page_type: str = "unknown"
+    semantic_key: str = ""
+    hotness: float = 0.0
+    dirty: bool = False
+    dependencies: list[str] | None = None
+
+
+@dataclass(frozen=True)
+class WorkingSetManifest:
+    manifest_id: str
+    created_at: float
+    registers: dict[str, Any]
+    hot_pages: list[dict[str, Any]]
+    cold_refs: list[dict[str, Any]]
+    budgets: dict[str, int]
+    usage: dict[str, int]
+    pressure: str
+
+
+@dataclass(frozen=True)
+class TranscriptExtractionResult:
+    transcript: str
+    pages_created: int
+    bytes_offloaded: int
+    manifest: WorkingSetManifest
 
 
 @dataclass(frozen=True)
@@ -96,6 +134,19 @@ def _page_id(source: str, meta: dict[str, Any]) -> str:
     return f"ctx-{zlib.crc32(raw.encode('utf-8')) & 0xFFFFFFFF:08x}"
 
 
+def _stable_page_id(source: str, semantic_key: str, evidence_uri: str = "") -> str:
+    import zlib
+
+    raw = json.dumps({"source": source, "semantic_key": semantic_key, "evidence_uri": evidence_uri}, ensure_ascii=False, sort_keys=True)
+    return f"ctx-{zlib.crc32(raw.encode('utf-8')) & 0xFFFFFFFF:08x}"
+
+
+def _hash_text(value: str) -> str:
+    import zlib
+
+    return f"{zlib.crc32(value.encode('utf-8', errors='replace')) & 0xFFFFFFFF:08x}"
+
+
 def record_page(
     source: ContextSource,
     *,
@@ -106,12 +157,20 @@ def record_page(
     evidence_uri: str = "",
     metadata: dict[str, Any] | None = None,
     root: Path | None = None,
+    thread: str = "tools",
+    page_type: str = "unknown",
+    semantic_key: str = "",
+    importance: float = 0.5,
+    hotness: float = 0.0,
+    dirty: bool = False,
+    dependencies: list[str] | None = None,
 ) -> ContextPage:
     root = root or kernel_root()
     root.mkdir(parents=True, exist_ok=True)
     meta = metadata or {}
+    stable_key = semantic_key or str(meta.get("stable_key") or "")
     page = ContextPage(
-        page_id=_page_id(source, meta),
+        page_id=_stable_page_id(source, stable_key, evidence_uri) if stable_key else _page_id(source, meta),
         source=source,
         cgroup=cgroup,
         resident=resident,
@@ -120,7 +179,14 @@ def record_page(
         evidence_uri=evidence_uri,
         created_at=_now(),
         last_accessed=_now(),
+        importance=importance,
         metadata=meta,
+        thread=thread,
+        page_type=page_type,
+        semantic_key=semantic_key,
+        hotness=hotness,
+        dirty=dirty,
+        dependencies=dependencies or [],
     )
     with _page_table_path(root).open("a", encoding="utf-8") as f:
         f.write(json.dumps(asdict(page), ensure_ascii=False, sort_keys=True) + "\n")
@@ -136,6 +202,12 @@ def iter_pages(root: Path | None = None) -> list[ContextPage]:
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
             data = json.loads(line)
+            data.setdefault("thread", "tools")
+            data.setdefault("page_type", "unknown")
+            data.setdefault("semantic_key", "")
+            data.setdefault("hotness", 0.0)
+            data.setdefault("dirty", False)
+            data.setdefault("dependencies", [])
             pages.append(ContextPage(**data))
         except Exception:
             continue
@@ -353,10 +425,17 @@ def swap_out_text(
     metadata: dict[str, Any] | None = None,
     root: Path | None = None,
     importance: float = 0.5,
+    thread: str = "tools",
+    page_type: str = "unknown",
+    semantic_key: str = "",
+    hotness: float = 0.0,
+    dirty: bool = False,
+    dependencies: list[str] | None = None,
 ) -> ContextPage:
     root = root or kernel_root()
     meta = metadata or {}
-    page_id = _page_id(source, {**meta, "size": len(text)})
+    stable_key = semantic_key or str(meta.get("stable_key") or "")
+    page_id = _stable_page_id(source, stable_key, str(meta.get("transcript", ""))) if stable_key else _page_id(source, {**meta, "size": len(text)})
     page_path = pages_dir(root) / f"{page_id}.txt"
     page_path.write_text(text, encoding="utf-8", errors="replace")
     page = ContextPage(
@@ -371,6 +450,12 @@ def swap_out_text(
         last_accessed=_now(),
         importance=importance,
         metadata=meta,
+        thread=thread,
+        page_type=page_type,
+        semantic_key=semantic_key,
+        hotness=hotness,
+        dirty=dirty,
+        dependencies=dependencies or [],
     )
     root.mkdir(parents=True, exist_ok=True)
     with _page_table_path(root).open("a", encoding="utf-8") as f:
@@ -461,6 +546,209 @@ def reclaim(target_bytes: int, *, root: Path | None = None) -> ReclaimResult:
     _rewrite_pages(rewritten, root)
     remaining = sum(p.size_bytes for p in rewritten if p.resident)
     return ReclaimResult(target_bytes=target_bytes, freed_bytes=freed, reclaimed_pages=reclaimed, remaining_resident_bytes=remaining)
+
+
+def _working_set_manifest_path(root: Path | None = None) -> Path:
+    return (root or kernel_root()) / WORKING_SET_MANIFEST_FILE
+
+
+def _text_preview(value: str, limit: int = 240) -> str:
+    normalized = " ".join(value.split())
+    return normalized[:limit]
+
+
+def _entry_text(entry: dict[str, Any]) -> str:
+    message = entry.get("message")
+    if isinstance(message, dict):
+        content = message.get("content", "")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, dict):
+                    if item.get("type") == "text":
+                        parts.append(str(item.get("text", "")))
+                    elif item.get("type") in {"tool_result", "tool_use"}:
+                        parts.append(json.dumps(item, ensure_ascii=False)[:1000])
+            return "\n".join(parts)
+    if "lastPrompt" in entry:
+        return str(entry.get("lastPrompt") or "")
+    attachment = entry.get("attachment")
+    if isinstance(attachment, dict):
+        return str(attachment.get("content") or attachment.get("stdout") or attachment.get("stderr") or "")
+    return ""
+
+
+def _classify_transcript_entry(entry: dict[str, Any]) -> tuple[str, str, str, str, str]:
+    entry_type = str(entry.get("type") or "unknown")
+    if entry_type == "user" or "lastPrompt" in entry:
+        return "main", "register", "user", "user intent", "user-intent"
+    if entry_type == "assistant":
+        return "main", "decision", "assistant", "assistant decision", "assistant-decision"
+    attachment = entry.get("attachment")
+    if isinstance(attachment, dict):
+        hook_name = str(attachment.get("hookName") or "")
+        if hook_name.startswith("PostToolUse"):
+            return "tools", "hook_payload", "hook", hook_name or "post tool hook", hook_name or "posttool"
+        if "pytest" in json.dumps(attachment, ensure_ascii=False).lower():
+            return "evidence", "evidence", "hook", "test evidence", "test-evidence"
+        return "governance", "evidence", "hook", hook_name or "hook attachment", hook_name or "hook"
+    return "evidence", "unknown", "unknown", entry_type, entry_type
+
+
+def extract_transcript_pages(
+    transcript_path: Path,
+    *,
+    root: Path | None = None,
+    min_offload_chars: int = 4000,
+    max_lines: int | None = None,
+) -> TranscriptExtractionResult:
+    root = root or kernel_root()
+    created = 0
+    offloaded = 0
+    try:
+        raw_lines = transcript_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        manifest = build_working_set_manifest(root=root)
+        return TranscriptExtractionResult(str(transcript_path), 0, 0, manifest)
+    base_index = max(0, len(raw_lines) - max_lines) if max_lines is not None else 0
+    lines = raw_lines[base_index:] if max_lines is not None else raw_lines
+    existing_ids = {page.page_id for page in iter_pages(root)}
+    for relative_index, line in enumerate(lines):
+        index = base_index + relative_index
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(entry, dict):
+            continue
+        text = _entry_text(entry)
+        if not text:
+            continue
+        thread, page_type, source, summary_prefix, semantic_prefix = _classify_transcript_entry(entry)
+        summary = f"{summary_prefix}: {_text_preview(text)}"
+        stable_key = f"{semantic_prefix}:{index}:{_hash_text(line)}"
+        stable_id = _stable_page_id(source, stable_key, str(transcript_path))
+        if stable_id in existing_ids:
+            continue
+        metadata = {"transcript": str(transcript_path), "line_index": index, "entry_type": entry.get("type", ""), "stable_key": stable_key}
+        if len(text) >= min_offload_chars or page_type in {"hook_payload", "evidence"}:
+            page = swap_out_text(
+                source if source in {"Read", "Grep", "Bash", "Agent", "memory_os", "hook", "user", "assistant", "unknown"} else "unknown",  # type: ignore[arg-type]
+                text,
+                cgroup="transcript",
+                summary=summary,
+                metadata=metadata,
+                root=root,
+                importance=0.9 if thread == "main" else 0.4,
+                thread=thread,
+                page_type=page_type,
+                semantic_key=stable_key,
+                hotness=0.9 if thread == "main" else 0.2,
+            )
+            offloaded += page.size_bytes
+            created += 1
+        elif page_type in {"register", "decision"}:
+            record_page(
+                source if source in {"Read", "Grep", "Bash", "Agent", "memory_os", "hook", "user", "assistant", "unknown"} else "unknown",  # type: ignore[arg-type]
+                cgroup="transcript",
+                size_bytes=len(text.encode("utf-8", errors="replace")),
+                summary=summary,
+                resident=True,
+                evidence_uri=str(transcript_path),
+                metadata=metadata,
+                root=root,
+                importance=0.9,
+                thread=thread,
+                page_type=page_type,
+                semantic_key=stable_key,
+                hotness=0.8,
+            )
+            created += 1
+    manifest = build_working_set_manifest(root=root)
+    return TranscriptExtractionResult(str(transcript_path), created, offloaded, manifest)
+
+
+def build_working_set_manifest(
+    *,
+    root: Path | None = None,
+    prompt: str = "",
+    budgets: dict[str, int] | None = None,
+    max_hot_pages: int = 32,
+) -> WorkingSetManifest:
+    root = root or kernel_root()
+    budgets = budgets or DEFAULT_THREAD_BUDGETS
+    pages = iter_pages(root)
+    usage = {thread: 0 for thread in budgets}
+    hot: list[ContextPage] = []
+    cold: list[ContextPage] = []
+    ranked = sorted(pages, key=lambda p: (p.thread == "main", p.dirty, p.hotness, p.importance, p.last_accessed), reverse=True)
+    for page in ranked:
+        thread = page.thread if page.thread in budgets else "tools"
+        budget = budgets.get(thread, 0)
+        page_cost = min(max(page.size_bytes, len(page.summary)), 4096)
+        if len(hot) < max_hot_pages and usage.get(thread, 0) + page_cost <= budget and (page.resident or page.thread == "main" or page.hotness >= 0.5):
+            usage[thread] = usage.get(thread, 0) + page_cost
+            hot.append(page)
+        else:
+            cold.append(page)
+    registers = {
+        "prompt_preview": _text_preview(prompt),
+        "page_count": len(pages),
+        "hot_count": len(hot),
+        "cold_count": len(cold),
+    }
+    pressure = "low"
+    if any(usage.get(thread, 0) >= int(budget * 0.95) for thread, budget in budgets.items() if budget > 0):
+        pressure = "high"
+    manifest = WorkingSetManifest(
+        manifest_id=f"wsm-{int(_now())}",
+        created_at=_now(),
+        registers=registers,
+        hot_pages=[
+            {
+                "page_id": p.page_id,
+                "thread": p.thread,
+                "type": p.page_type,
+                "semantic_key": p.semantic_key,
+                "summary": p.summary,
+                "evidence_uri": p.evidence_uri,
+                "dependencies": p.dependencies or [],
+            }
+            for p in hot
+        ],
+        cold_refs=[
+            {
+                "page_id": p.page_id,
+                "thread": p.thread,
+                "type": p.page_type,
+                "semantic_key": p.semantic_key,
+                "summary": p.summary,
+                "evidence_uri": p.evidence_uri,
+            }
+            for p in cold[:128]
+        ],
+        budgets=budgets,
+        usage=usage,
+        pressure=pressure,
+    )
+    root.mkdir(parents=True, exist_ok=True)
+    _working_set_manifest_path(root).write_text(json.dumps(asdict(manifest), ensure_ascii=False, indent=2), encoding="utf-8")
+    return manifest
+
+
+def manifest_context(manifest: WorkingSetManifest, *, max_chars: int = 6000) -> str:
+    lines = [
+        "[context_kernel:working_set_manifest]",
+        f"manifest={manifest.manifest_id} pressure={manifest.pressure} hot={len(manifest.hot_pages)} cold={len(manifest.cold_refs)}",
+    ]
+    for page in manifest.hot_pages:
+        lines.append(f"- [{page.get('thread')}/{page.get('type')}] {page.get('semantic_key')}: {page.get('summary')} (ref={page.get('page_id')})")
+    if manifest.cold_refs:
+        lines.append(f"cold_refs={len(manifest.cold_refs)} available via page_fault(page_id, range); raw cold pages are not resident.")
+    text = "\n".join(lines)
+    return text[:max_chars]
 
 
 def build_recovery_context(account: ContextAccount, reclaim_result: ReclaimResult | None = None) -> str:

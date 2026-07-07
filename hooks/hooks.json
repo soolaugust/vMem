@@ -180,6 +180,18 @@
           }
         ]
       }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/post_compact_epoch.py\"",
+            "timeout": 5,
+            "async": false
+          }
+        ]
+      }
     ]
   }
 }

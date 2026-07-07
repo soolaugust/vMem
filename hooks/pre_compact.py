@@ -132,14 +132,27 @@ def main():
         except Exception:
             context_text = context_text[:max_chars]
 
-    output = {
-        "hookSpecificOutput": {
-            "additionalContext": context_text
+    try:
+        from hooks.context_governor import enforce_additional_context
+        output = enforce_additional_context(
+            None,
+            context_text,
+            producer="pre_compact",
+            hook_event_name="PreCompact",
+            mandatory=True,
+            max_chars=max_chars,
+        )
+    except Exception:
+        output = {
+            "hookSpecificOutput": {
+                "hookEventName": "PreCompact",
+                "additionalContext": context_text[:max_chars]
+            }
         }
-    }
-    if tac_meta:
+    if output and tac_meta:
         output["hookSpecificOutput"]["_tac_compression"] = tac_meta
-    print(json.dumps(output, ensure_ascii=False))
+    if output:
+        print(json.dumps(output, ensure_ascii=False))
 
 
 if __name__ == "__main__":
