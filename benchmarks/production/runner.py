@@ -157,15 +157,15 @@ def _check_install_repair(ctx: BenchContext) -> Check:
     )
 
 
-def _hard_overflow_payload(ctx: BenchContext) -> tuple[dict[str, Any], Path]:
+def _warn_overflow_payload(ctx: BenchContext) -> tuple[dict[str, Any], Path]:
     transcript = ctx.temp / "huge-transcript.jsonl"
     transcript.write_text(json.dumps({"message": {"content": [{"type": "text", "text": "t" * 5000}]}}) + "\n", encoding="utf-8")
     env = {
         "MEMORY_OS_DIR": str(ctx.memory_dir),
         "HARNESS_HEARTBEAT_DIR": str(ctx.memory_dir),
         "MEMORY_OS_PROMPT_CHAR_BUDGET": "1000",
-        "MEMORY_OS_TOTAL_CONTEXT_WARN_CHARS": "100",
-        "MEMORY_OS_TOTAL_CONTEXT_HARD_CHARS": "200",
+        "MEMORY_OS_TOTAL_CONTEXT_WARN_CHARS": "200",
+        "MEMORY_OS_TOTAL_CONTEXT_HARD_CHARS": "10000",
         "MEMORY_OS_STATIC_CONTEXT_RESERVE_CHARS": "100",
         "MEMORY_OS_DOWNSTREAM_CONTEXT_RESERVE_CHARS": "1",
     }
@@ -174,25 +174,25 @@ def _hard_overflow_payload(ctx: BenchContext) -> tuple[dict[str, Any], Path]:
     return payload, transcript
 
 
-def _check_hard_overflow(ctx: BenchContext) -> Check:
-    payload, _ = _hard_overflow_payload(ctx)
+def _check_warn_overflow(ctx: BenchContext) -> Check:
+    payload, _ = _warn_overflow_payload(ctx)
     pressure = json.loads((ctx.memory_dir / "context_pressure_state.json").read_text(encoding="utf-8"))
     mode = json.loads((ctx.memory_dir / "context_mode_state.json").read_text(encoding="utf-8"))
     working_set = ctx.memory_dir / "working_set" / "current.json"
     notice = payload.get("hookSpecificOutput", {}).get("additionalContext", "")
     ok = (
         payload.get("decision") == "approve"
-        and pressure.get("last_pressure_level") == "critical"
+        and pressure.get("last_pressure_level") == "high"
         and mode.get("mode") == "working_set"
         and working_set.exists()
         and 0 < len(notice) <= 1200
     )
     return Check(
-        name="context_hard_overflow_enters_working_set",
-        title="Hard context overflow enters working-set mode",
+        name="context_warn_overflow_enters_working_set",
+        title="Warning context overflow enters working-set mode",
         category="context_safety",
         ok=ok,
-        message="hard overflow triggers bounded working-set reclaim without blocking" if ok else "hard overflow did not enter bounded working-set mode",
+        message="warn watermark triggers bounded working-set reclaim before hard overflow" if ok else "warn watermark did not enter bounded working-set mode",
         value={
             "decision": payload.get("decision"),
             "pressure": pressure.get("last_pressure_level"),
@@ -200,22 +200,22 @@ def _check_hard_overflow(ctx: BenchContext) -> Check:
             "working_set_exists": working_set.exists(),
             "notice_chars": len(notice),
         },
-        threshold="decision=approve, pressure=critical, mode=working_set, notice<=1200",
-        impact="vMem manages context pressure with OS-style working-set reclaim instead of stopping the user or sending an overlarge request blindly.",
-        fix="Make prompt_budget_guard write working_set state, shed optional context, and emit only bounded recovery context under hard pressure.",
+        threshold="decision=approve, pressure=high, mode=working_set, notice<=1200",
+        impact="vMem starts OS-style working-set reclaim at the warning watermark, before requests reach the API context-window failure point.",
+        fix="Make prompt_budget_guard write working_set state, shed optional context, and emit only bounded recovery context under warning pressure.",
         gate=True,
     )
 
 
 def _check_retriever_shed(ctx: BenchContext) -> Check:
-    _hard_overflow_payload(ctx)
+    _warn_overflow_payload(ctx)
     result = run_cmd([sys.executable, "hooks/retriever.py"], env={"MEMORY_OS_DIR": str(ctx.memory_dir)}, input_text=json.dumps({"prompt": "need architecture context"}))
     daemon_text = (ctx.root / "hooks" / "retriever_daemon.py").read_text(encoding="utf-8")
     daemon_wired = "if should_shed_optional_context(hook_input):" in daemon_text and daemon_text.index("if should_shed_optional_context(hook_input):") < daemon_text.index("# ── Stage 0: SKIP ──")
     ok = result.returncode == 0 and result.stdout == "" and daemon_wired
     return Check(
-        name="critical_pressure_sheds_retriever",
-        title="Critical pressure sheds optional retrieval context",
+        name="high_pressure_sheds_retriever",
+        title="High pressure sheds optional retrieval context",
         category="context_safety",
         ok=ok,
         message="fallback emits no additionalContext and daemon is wired before Stage 0" if ok else "retriever can still add context under critical pressure",
@@ -277,8 +277,8 @@ CHECKS: list[Callable[[BenchContext], Check]] = [
     timed("package_metadata_ok", "Package metadata exposes vmem and legacy CLI", "install", _check_package_metadata),
     timed("doctor_passes", "Doctor passes on a fresh writable memory dir", "install", _check_doctor),
     timed("install_repair_idempotent", "Install/repair are idempotent", "install", _check_install_repair),
-    timed("context_hard_overflow_enters_working_set", "Hard context overflow enters working-set mode", "context_safety", _check_hard_overflow),
-    timed("critical_pressure_sheds_retriever", "Critical pressure sheds optional retrieval context", "context_safety", _check_retriever_shed),
+    timed("context_warn_overflow_enters_working_set", "Warning context overflow enters working-set mode", "context_safety", _check_warn_overflow),
+    timed("high_pressure_sheds_retriever", "High pressure sheds optional retrieval context", "context_safety", _check_retriever_shed),
     timed("fault_no_db_degrades", "No store.db degrades instead of crashing", "fault", _check_no_db),
     timed("public_hygiene_passes", "Public files contain no internal strings", "hygiene", _check_public_hygiene),
 ]
@@ -340,8 +340,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "## Value At A Glance",
         "",
-        "- **OS-style context reclaim:** hard overflow enters bounded working-set mode instead of blocking the user.",
-        "- **API 400 prevention path:** critical pressure sheds optional context and emits only a bounded working-set notice.",
+        "- **OS-style context reclaim:** warning watermark enters bounded working-set mode before hard overflow.",
+        "- **API 400 prevention path:** high pressure sheds optional context and emits only a bounded working-set notice.",
         "- **Operational readiness:** doctor, install, repair, no-db degraded reports, and public hygiene are checked as release gates.",
         "",
         "## Hard Gates",
