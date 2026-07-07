@@ -168,7 +168,7 @@ def main() -> None:
         payload = json.loads(oversized_context.stdout)
         assert payload["decision"] == "approve"
         assert "projected request context" in payload["reason"]
-        assert "working-set" in payload["reason"]
+        assert "接管上下文治理" in payload["reason"] or "working-set" in payload["reason"]
         assert payload["detail"]["transcript_chars"] >= 950
         assert "hookSpecificOutput" in payload
         assert len(payload["hookSpecificOutput"]["additionalContext"]) <= 1200
@@ -179,6 +179,64 @@ def main() -> None:
         assert mode_state["mode"] == "working_set"
         working_set = heartbeat_dir / "memory-os" / "working_set" / "current.json"
         assert working_set.exists()
+        rss_snapshot = json.loads((heartbeat_dir / "memory-os" / "context_rss_snapshot.json").read_text(encoding="utf-8"))
+        assert rss_snapshot["projected_context_chars"] == payload["detail"]["projected_context_chars"]
+
+        severe_context = run_guard(
+            "trace_id: test-trace-400",
+            100,
+            heartbeat_dir,
+            transcript_path=transcript,
+            total_budget=900,
+            static_reserve=100,
+        )
+        assert severe_context.returncode == 0, severe_context.stdout + severe_context.stderr
+        severe_payload = json.loads(severe_context.stdout)
+        assert severe_payload["decision"] == "approve"
+        mode_state = json.loads((heartbeat_dir / "memory-os" / "context_mode_state.json").read_text(encoding="utf-8"))
+        assert mode_state["mode"] == "emergency"
+        oom_events = (heartbeat_dir / "memory-os" / "context_oom_events.jsonl").read_text(encoding="utf-8")
+        assert "test-trace-400" in oom_events
+        assert len(severe_payload["hookSpecificOutput"]["additionalContext"]) <= 700
+
+        compact_recovery = run_guard(
+            "/compact",
+            1,
+            heartbeat_dir,
+            total_budget=50_000,
+            static_reserve=100,
+        )
+        assert compact_recovery.returncode == 0, compact_recovery.stdout + compact_recovery.stderr
+        mode_state = json.loads((heartbeat_dir / "memory-os" / "context_mode_state.json").read_text(encoding="utf-8"))
+        assert mode_state["mode"] == "normal"
+        pressure_state = json.loads((heartbeat_dir / "memory-os" / "context_pressure_state.json").read_text(encoding="utf-8"))
+        assert pressure_state["last_pressure_level"] == "low"
+
+        recovered = run_guard(
+            "small prompt",
+            100,
+            heartbeat_dir,
+            total_budget=50_000,
+            static_reserve=100,
+        )
+        assert recovered.returncode == 0, recovered.stdout + recovered.stderr
+        mode_state = json.loads((heartbeat_dir / "memory-os" / "context_mode_state.json").read_text(encoding="utf-8"))
+        assert mode_state["mode"] == "normal"
+        pressure_state = json.loads((heartbeat_dir / "memory-os" / "context_pressure_state.json").read_text(encoding="utf-8"))
+        assert pressure_state["last_pressure_level"] == "low"
+
+        trace_only_dir = heartbeat_dir / "trace-only"
+        trace_only = run_guard(
+            "分析 trace_id: harmless-log-id 的普通日志",
+            100,
+            trace_only_dir,
+            total_budget=50_000,
+            static_reserve=100,
+        )
+        assert trace_only.returncode == 0, trace_only.stdout + trace_only.stderr
+        assert not (trace_only_dir / "memory-os" / "context_oom_events.jsonl").exists()
+        trace_only_mode = json.loads((trace_only_dir / "memory-os" / "context_mode_state.json").read_text(encoding="utf-8"))
+        assert trace_only_mode["mode"] == "normal"
 
         slash_context_allowed = run_guard(
             "/clear",

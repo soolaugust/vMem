@@ -15,8 +15,8 @@ def _run_prompt_guard(memory_dir: Path, transcript: Path) -> dict:
         "MEMORY_OS_DIR": str(memory_dir),
         "HARNESS_HEARTBEAT_DIR": str(memory_dir),
         "MEMORY_OS_PROMPT_CHAR_BUDGET": "1000",
-        "MEMORY_OS_TOTAL_CONTEXT_WARN_CHARS": "100",
-        "MEMORY_OS_TOTAL_CONTEXT_HARD_CHARS": "200",
+        "MEMORY_OS_TOTAL_CONTEXT_WARN_CHARS": "200",
+        "MEMORY_OS_TOTAL_CONTEXT_HARD_CHARS": "5000",
         "MEMORY_OS_STATIC_CONTEXT_RESERVE_CHARS": "100",
         "MEMORY_OS_DOWNSTREAM_CONTEXT_RESERVE_CHARS": "1",
     })
@@ -33,7 +33,7 @@ def _run_prompt_guard(memory_dir: Path, transcript: Path) -> dict:
     return json.loads(result.stdout)
 
 
-def test_hard_context_overflow_enters_working_set_and_sheds_retriever(tmp_path: Path) -> None:
+def test_warn_context_overflow_enters_working_set_and_sheds_retriever(tmp_path: Path) -> None:
     memory_dir = tmp_path / "memory-os"
     memory_dir.mkdir()
     transcript = tmp_path / "transcript.jsonl"
@@ -44,11 +44,11 @@ def test_hard_context_overflow_enters_working_set_and_sheds_retriever(tmp_path: 
 
     payload = _run_prompt_guard(memory_dir, transcript)
     assert payload["decision"] == "approve"
-    assert "working-set" in payload["reason"]
+    assert "提前进入 working-set" in payload["reason"] or "working-set" in payload["reason"]
     assert "hookSpecificOutput" in payload
     assert len(payload["hookSpecificOutput"]["additionalContext"]) <= 1200
     pressure = json.loads((memory_dir / "context_pressure_state.json").read_text(encoding="utf-8"))
-    assert pressure["last_pressure_level"] == "critical"
+    assert pressure["last_pressure_level"] == "high"
     mode = json.loads((memory_dir / "context_mode_state.json").read_text(encoding="utf-8"))
     assert mode["mode"] == "working_set"
     working_set = memory_dir / "working_set" / "current.json"
