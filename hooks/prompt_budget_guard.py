@@ -14,6 +14,11 @@ import time
 from pathlib import Path
 from typing import Any, TextIO, TypedDict
 
+
+def _claude_project_slug(cwd: str) -> str:
+    resolved = str(Path(cwd).expanduser().resolve())
+    return resolved.replace("/", "-")
+
 MEMORY_OS_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE = Path(__file__).resolve().parents[3]
 for import_root in (MEMORY_OS_ROOT, WORKSPACE):
@@ -139,12 +144,57 @@ def _downstream_reserve() -> int:
     return _env_int(DOWNSTREAM_RESERVE_ENV, DEFAULT_DOWNSTREAM_CONTEXT_RESERVE)
 
 
+def _candidate_transcript_dirs(data: dict[str, Any]) -> list[Path]:
+    values = [data.get("cwd"), os.environ.get("CLAUDE_CWD"), os.getcwd()]
+    dirs: list[Path] = []
+    seen: set[Path] = set()
+    for value in values:
+        if not isinstance(value, str) or not value.strip():
+            continue
+        try:
+            project_dir = Path.home() / ".claude" / "projects" / _claude_project_slug(value)
+        except OSError:
+            continue
+        if project_dir not in seen:
+            seen.add(project_dir)
+            dirs.append(project_dir)
+    return dirs
+
+
+def _latest_transcript_for_session(data: dict[str, Any]) -> Path | None:
+    session_id = _session_id(data)
+    latest: tuple[float, Path] | None = None
+    for project_dir in _candidate_transcript_dirs(data):
+        if not project_dir.is_dir():
+            continue
+        if session_id:
+            direct = project_dir / f"{session_id}.jsonl"
+            if direct.exists() and direct.is_file():
+                return direct
+            continue
+        try:
+            candidates = list(project_dir.glob("*.jsonl"))
+        except OSError:
+            continue
+        for candidate in candidates:
+            try:
+                stat = candidate.stat()
+            except OSError:
+                continue
+            if not candidate.is_file():
+                continue
+            if latest is None or stat.st_mtime > latest[0]:
+                latest = (stat.st_mtime, candidate)
+    return latest[1] if latest is not None else None
+
+
 def _transcript_path(data: dict[str, Any]) -> Path | None:
-    value = data.get("transcript_path") or os.environ.get("CLAUDE_TRANSCRIPT_PATH", "")
-    if not isinstance(value, str) or not value.strip():
-        return None
-    path = Path(value).expanduser()
-    return path if path.exists() and path.is_file() else None
+    value = data.get("transcript_path") or data.get("transcriptPath") or os.environ.get("CLAUDE_TRANSCRIPT_PATH", "")
+    if isinstance(value, str) and value.strip():
+        path = Path(value).expanduser()
+        if path.exists() and path.is_file():
+            return path
+    return _latest_transcript_for_session(data)
 
 
 def _content_chars(content: Any) -> int:
@@ -467,7 +517,7 @@ def reclaim_transcript_context(path: Path) -> dict[str, int | str]:
 
 
 def _session_id(data: dict[str, Any]) -> str:
-    value = data.get("session_id") or os.environ.get("CLAUDE_SESSION_ID", "")
+    value = data.get("session_id") or data.get("sessionId") or os.environ.get("CLAUDE_SESSION_ID", "")
     return value if isinstance(value, str) else ""
 
 

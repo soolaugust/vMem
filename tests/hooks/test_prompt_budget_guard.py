@@ -25,6 +25,8 @@ def run_guard(
     static_reserve: int = 100,
     downstream_reserve: int | None = None,
     session_id: str | None = None,
+    session_id_key: str = "session_id",
+    cwd: Path | None = None,
     state_file: Path | None = None,
     compact_marker_scan_bytes: int | None = None,
 ) -> subprocess.CompletedProcess[str]:
@@ -44,11 +46,12 @@ def run_guard(
         env["MEMORY_OS_COMPACT_MARKER_SCAN_BYTES"] = str(compact_marker_scan_bytes)
     env["HARNESS_HEARTBEAT_DIR"] = str(heartbeat_dir)
     env["MEMORY_OS_DIR"] = str(heartbeat_dir / "memory-os")
-    if state_file is not None:
-        env["HOME"] = str(state_file.parent.parent.parent)
+    env["HOME"] = str(state_file.parent.parent.parent if state_file is not None else heartbeat_dir / "home")
     payload = {"prompt": prompt}
     if session_id is not None:
-        payload["session_id"] = session_id
+        payload[session_id_key] = session_id
+    if cwd is not None:
+        payload["cwd"] = str(cwd)
     if transcript_path is not None:
         payload["transcript_path"] = str(transcript_path)
     return subprocess.run(
@@ -66,6 +69,10 @@ def write_transcript(path: Path, text: str) -> None:
         json.dumps({"message": {"content": [{"type": "text", "text": text}]}}) + "\n",
         encoding="utf-8",
     )
+
+
+def claude_project_slug(path: Path) -> str:
+    return str(path.resolve()).replace("/", "-")
 
 
 def write_compacted_transcript(path: Path, before: str, after: str) -> None:
@@ -156,6 +163,49 @@ def main() -> None:
         assert pressure_state["last_pressure_level"] == "high"
 
         write_transcript(transcript, "t" * 950)
+        fallback_home = heartbeat_dir / "fallback-home"
+        fallback_cwd = heartbeat_dir / "workspace"
+        fallback_cwd.mkdir(parents=True)
+        fallback_session_id = "fallback-session"
+        fallback_project_dir = fallback_home / ".claude" / "projects" / claude_project_slug(fallback_cwd)
+        fallback_project_dir.mkdir(parents=True)
+        fallback_transcript = fallback_project_dir / f"{fallback_session_id}.jsonl"
+        write_transcript(fallback_transcript, "f" * 950)
+        fallback_context = run_guard(
+            "ok",
+            10,
+            heartbeat_dir / "fallback",
+            total_budget=41_000,
+            static_reserve=100,
+            session_id=fallback_session_id,
+            session_id_key="sessionId",
+            cwd=fallback_cwd,
+            state_file=fallback_home / ".claude" / "memory-os" / "state.json",
+        )
+        assert fallback_context.returncode == 0, fallback_context.stdout + fallback_context.stderr
+        fallback_payload = json.loads(fallback_context.stdout)
+        assert fallback_payload["detail"]["transcript_chars"] >= 950
+        fallback_snapshot = json.loads((heartbeat_dir / "fallback" / "memory-os" / "context_rss_snapshot.json").read_text(encoding="utf-8"))
+        assert fallback_snapshot["transcript_path"] == str(fallback_transcript)
+
+        mismatched_context = run_guard(
+            "ok",
+            10,
+            heartbeat_dir / "mismatched",
+            total_budget=41_000,
+            static_reserve=100,
+            session_id="missing-session",
+            session_id_key="sessionId",
+            cwd=fallback_cwd,
+            state_file=fallback_home / ".claude" / "memory-os" / "state.json",
+        )
+        assert mismatched_context.returncode == 0, mismatched_context.stdout + mismatched_context.stderr
+        mismatched_payload = json.loads(mismatched_context.stdout) if mismatched_context.stdout else {}
+        mismatched_snapshot = json.loads((heartbeat_dir / "mismatched" / "memory-os" / "context_rss_snapshot.json").read_text(encoding="utf-8"))
+        assert mismatched_snapshot["transcript_path"] == ""
+        assert mismatched_snapshot["transcript_chars"] == 0
+        assert "projected request context" not in mismatched_payload.get("reason", "")
+
         oversized_context = run_guard(
             "ok",
             10,
