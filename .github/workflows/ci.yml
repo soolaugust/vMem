@@ -28,6 +28,7 @@ jobs:
           python -m pytest \
             tests/test_vmem_doctor.py \
             tests/test_context_400_e2e.py \
+            tests/test_transcript_reclaimer.py \
             tests/test_production_benchmark.py \
             hooks/test_context_governor.py \
             hooks/test_prompt_budget_guard.py -q
