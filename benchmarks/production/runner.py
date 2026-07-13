@@ -273,12 +273,47 @@ def _check_public_hygiene(ctx: BenchContext) -> Check:
     )
 
 
+def _check_transcript_reclaim(ctx: BenchContext) -> Check:
+    from hooks.transcript_reclaimer import reclaim_transcript
+    transcript = ctx.temp / "oversized-agent-session.jsonl"
+    lines = []
+    for index in range(1200):
+        role = "user" if index % 2 == 0 else "assistant"
+        content = ("large tool/result payload " + str(index) + " ") * 200
+        lines.append(json.dumps({"type": role, "message": {"role": role, "content": content}}, ensure_ascii=False) + "\n")
+    transcript.write_text("".join(lines), encoding="utf-8")
+    original = transcript.stat().st_size
+    result = reclaim_transcript(
+        transcript,
+        memory_dir=ctx.memory_dir,
+        target_bytes=512_000,
+        keep_tail_lines=80,
+        max_line_bytes=8_000,
+        reason="benchmark hard context pressure",
+    )
+    reclaimed = transcript.stat().st_size
+    ok = result.ok and result.changed and reclaimed <= 512_000 and Path(result.backup_path).exists() and Path(result.manifest_path).exists()
+    return Check(
+        name="transcript_hard_reclaim_bounds_active_context",
+        title="Transcript hard reclaim bounds active context",
+        category="context_safety",
+        ok=ok,
+        message="oversized transcript is backed up and rewritten below target" if ok else "transcript reclaim did not bound active context",
+        value={"original_bytes": original, "reclaimed_bytes": reclaimed, "backup_path_exists": Path(result.backup_path).exists()},
+        threshold="reclaimed_bytes <= 512000 and backup exists",
+        impact="This is the missing MMU layer: vMem reduces the host transcript itself, not only its own retrieval injection.",
+        fix="Run hooks/transcript_reclaimer.py or enable hard reclaim from the pressure guard before Agent activity inherits a huge transcript.",
+        gate=True,
+    )
+
+
 CHECKS: list[Callable[[BenchContext], Check]] = [
     timed("package_metadata_ok", "Package metadata exposes vmem and legacy CLI", "install", _check_package_metadata),
     timed("doctor_passes", "Doctor passes on a fresh writable memory dir", "install", _check_doctor),
     timed("install_repair_idempotent", "Install/repair are idempotent", "install", _check_install_repair),
     timed("context_warn_overflow_enters_working_set", "Warning context overflow enters working-set mode", "context_safety", _check_warn_overflow),
     timed("high_pressure_sheds_retriever", "High pressure sheds optional retrieval context", "context_safety", _check_retriever_shed),
+    timed("transcript_hard_reclaim_bounds_active_context", "Transcript hard reclaim bounds active context", "context_safety", _check_transcript_reclaim),
     timed("fault_no_db_degrades", "No store.db degrades instead of crashing", "fault", _check_no_db),
     timed("public_hygiene_passes", "Public files contain no internal strings", "hygiene", _check_public_hygiene),
 ]

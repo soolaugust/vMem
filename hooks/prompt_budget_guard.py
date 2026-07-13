@@ -57,6 +57,11 @@ from context_governor import (  # noqa: E402
 )
 from lib.prompt_io import read_hook_input  # noqa: E402
 
+try:
+    from transcript_reclaimer import reclaim_transcript as hard_reclaim_transcript  # type: ignore[import-not-found]  # noqa: E402
+except Exception:  # pragma: no cover - prompt guard must keep working if hard reclaimer import breaks
+    hard_reclaim_transcript = None  # type: ignore[assignment]
+
 DEFAULT_PROMPT_CHAR_BUDGET = 120_000
 DEFAULT_TOTAL_WARN_CHAR_BUDGET = 240_000
 DEFAULT_TOTAL_HARD_CHAR_BUDGET = 320_000
@@ -77,6 +82,10 @@ TRANSCRIPT_RECLAIM_MAX_STDIO_CHARS = int(os.environ.get("MEMORY_OS_TRANSCRIPT_RE
 TRANSCRIPT_RECLAIM_MAX_CONTENT_CHARS = int(os.environ.get("MEMORY_OS_TRANSCRIPT_RECLAIM_MAX_CONTENT_CHARS", "2500"))
 TRANSCRIPT_RECLAIM_MAX_FIELD_CHARS = int(os.environ.get("MEMORY_OS_TRANSCRIPT_RECLAIM_MAX_FIELD_CHARS", "2000"))
 TRANSCRIPT_RECLAIM_MAX_RECORD_CHARS = int(os.environ.get("MEMORY_OS_TRANSCRIPT_RECLAIM_MAX_RECORD_CHARS", "32000"))
+HARD_TRANSCRIPT_RECLAIM_TARGET_BYTES = int(os.environ.get("MEMORY_OS_HARD_TRANSCRIPT_RECLAIM_TARGET_BYTES", "0"))
+HARD_TRANSCRIPT_RECLAIM_MIN_TARGET_BYTES = int(os.environ.get("MEMORY_OS_HARD_TRANSCRIPT_RECLAIM_MIN_TARGET_BYTES", "65536"))
+HARD_TRANSCRIPT_RECLAIM_KEEP_TAIL_LINES = int(os.environ.get("MEMORY_OS_HARD_TRANSCRIPT_RECLAIM_KEEP_TAIL_LINES", "400"))
+HARD_TRANSCRIPT_RECLAIM_MAX_LINE_BYTES = int(os.environ.get("MEMORY_OS_HARD_TRANSCRIPT_RECLAIM_MAX_LINE_BYTES", "32768"))
 BIG_PAYLOAD_KEYS = frozenset({
     "old_string", "new_string", "oldString", "newString", "content", "command",
     "stdout", "stderr", "text", "file_content",
@@ -575,6 +584,38 @@ def _record(ok: bool, summary: str) -> None:
         pass
 
 
+def _hard_reclaim_target_bytes(detail: BudgetDetail) -> int:
+    if HARD_TRANSCRIPT_RECLAIM_TARGET_BYTES > 0:
+        return HARD_TRANSCRIPT_RECLAIM_TARGET_BYTES
+    available = (
+        detail["total_context_hard_chars"]
+        - detail["prompt_chars"]
+        - detail["static_reserve_chars"]
+        - detail["downstream_context_reserve_chars"]
+    )
+    return max(HARD_TRANSCRIPT_RECLAIM_MIN_TARGET_BYTES, min(DEFAULT_TOTAL_HARD_CHAR_BUDGET, available - 1024))
+
+
+def _hard_reclaim_transcript(transcript: Path, detail: BudgetDetail, reason: str) -> dict[str, Any]:
+    if hard_reclaim_transcript is None:
+        return {"ok": False, "changed": False, "reason": "hard transcript reclaimer unavailable"}
+    target_bytes = _hard_reclaim_target_bytes(detail)
+    try:
+        result = hard_reclaim_transcript(
+            transcript,
+            memory_dir=MEMORY_OS_DIR,
+            target_bytes=target_bytes,
+            keep_tail_lines=HARD_TRANSCRIPT_RECLAIM_KEEP_TAIL_LINES,
+            max_line_bytes=HARD_TRANSCRIPT_RECLAIM_MAX_LINE_BYTES,
+            reason=reason,
+        )
+        data = result.to_dict()
+        data["target_bytes"] = target_bytes
+        return data
+    except Exception as exc:
+        return {"ok": False, "changed": False, "target_bytes": target_bytes, "reason": f"hard transcript reclaim failed: {type(exc).__name__}: {exc}"}
+
+
 def main() -> None:
     data = _read_input()
     prompt = _prompt_text(data)
@@ -588,10 +629,15 @@ def main() -> None:
 
     detail = _budget_detail(data, prompt)
     transcript = _transcript_path(data)
-    reclaim_result: dict[str, int | str] | None = None
+    reclaim_result: dict[str, Any] | None = None
+    hard_reclaim_result: dict[str, Any] | None = None
     if transcript and detail["projected_context_chars"] > detail["total_context_warn_chars"]:
         reclaim_result = reclaim_transcript_context(transcript)
         if int(reclaim_result.get("saved_bytes", 0) or 0) > 0:
+            detail = _budget_detail(data, prompt)
+    if transcript and detail["projected_context_chars"] > detail["total_context_hard_chars"]:
+        hard_reclaim_result = _hard_reclaim_transcript(transcript, detail, "prompt hard context pressure")
+        if hard_reclaim_result.get("changed"):
             detail = _budget_detail(data, prompt)
     manifest_notice = ""
     if transcript and build_working_set_manifest is not None and manifest_context is not None:
@@ -606,6 +652,8 @@ def main() -> None:
     snapshot = write_rss_snapshot(dict(detail), prompt=prompt, transcript_path=transcript)
     if reclaim_result:
         snapshot["transcript_reclaim"] = reclaim_result
+    if hard_reclaim_result:
+        snapshot["hard_transcript_reclaim"] = hard_reclaim_result
     if manifest_notice:
         snapshot["working_set_manifest_context_chars"] = len(manifest_notice)
 
@@ -652,7 +700,8 @@ def main() -> None:
             f"(warn={detail['total_context_warn_chars']}, transcript={detail['transcript_chars']}, "
             f"prompt={detail['prompt_chars']}, static_reserve={detail['static_reserve_chars']}, "
             f"downstream_reserve={detail['downstream_context_reserve_chars']}). "
-            f"已自动回收 transcript saved_bytes={int((reclaim_result or {}).get('saved_bytes', 0) or 0)}；"
+            f"已自动回收 transcript saved_bytes={int((reclaim_result or {}).get('saved_bytes', 0) or 0)} "
+            f"hard_changed={bool((hard_reclaim_result or {}).get('changed'))}；"
             "不阻断用户输入；已强制接管上下文治理并压制可选上下文注入。"
         )
         _record(
@@ -665,6 +714,7 @@ def main() -> None:
             "reason": reason,
             "detail": detail,
             "transcript_reclaim": reclaim_result or {},
+            "hard_transcript_reclaim": hard_reclaim_result or {},
         }
         governed = enforce_additional_context(
             data,
@@ -708,6 +758,8 @@ def main() -> None:
             "reason": reason,
             "detail": detail,
         }
+        if hard_reclaim_result:
+            output["hard_transcript_reclaim"] = hard_reclaim_result
         governed = enforce_additional_context(
             data,
             notice,

@@ -21,13 +21,14 @@ jobs:
           python -m json.tool hooks/hooks.json >/dev/null
           python -m py_compile \
             memory_os/cli/mcp_memory_lookup.py memory_os/cli/vmem_doctor.py memory_os/observability/production_assertions.py \
-            hooks/context_governor.py hooks/prompt_budget_guard.py \
+            hooks/context_governor.py hooks/prompt_budget_guard.py hooks/transcript_reclaimer.py \
             hooks/retriever.py hooks/retriever_daemon.py
       - name: Unit and e2e tests
         run: |
           python -m pytest \
             tests/test_vmem_doctor.py \
             tests/test_context_400_e2e.py \
+            tests/test_transcript_reclaimer.py \
             tests/test_production_benchmark.py \
             hooks/test_context_governor.py \
             hooks/test_prompt_budget_guard.py -q

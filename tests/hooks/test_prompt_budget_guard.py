@@ -29,6 +29,7 @@ def run_guard(
     cwd: Path | None = None,
     state_file: Path | None = None,
     compact_marker_scan_bytes: int | None = None,
+    hard_reclaim_target_bytes: int | None = None,
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["MEMORY_OS_PROMPT_CHAR_BUDGET"] = str(budget)
@@ -44,6 +45,9 @@ def run_guard(
     env.pop("MEMORY_OS_COMPACT_MARKER_SCAN_BYTES", None)
     if compact_marker_scan_bytes is not None:
         env["MEMORY_OS_COMPACT_MARKER_SCAN_BYTES"] = str(compact_marker_scan_bytes)
+    env.pop("MEMORY_OS_HARD_TRANSCRIPT_RECLAIM_TARGET_BYTES", None)
+    if hard_reclaim_target_bytes is not None:
+        env["MEMORY_OS_HARD_TRANSCRIPT_RECLAIM_TARGET_BYTES"] = str(hard_reclaim_target_bytes)
     env["HARNESS_HEARTBEAT_DIR"] = str(heartbeat_dir)
     env["MEMORY_OS_DIR"] = str(heartbeat_dir / "memory-os")
     env["HOME"] = str(state_file.parent.parent.parent if state_file is not None else heartbeat_dir / "home")
@@ -496,8 +500,8 @@ def main() -> None:
         assert early_marker_warned.returncode == 0, early_marker_warned.stdout + early_marker_warned.stderr
         payload = json.loads(early_marker_warned.stdout)
         assert payload["decision"] == "approve"
-        assert payload["detail"]["transcript_accounting"] == "tail"
-        assert payload["detail"]["transcript_chars"] >= 4_000_000
+        assert payload["hard_transcript_reclaim"]["changed"] is True
+        assert payload["detail"]["transcript_chars"] < 4_000_000
 
         bounded_scan_transcript = heartbeat_dir / "bounded-scan.jsonl"
         write_compacted_transcript(bounded_scan_transcript, "h" * 5000, "fresh")
@@ -515,6 +519,57 @@ def main() -> None:
         )
         assert bounded_scan_allowed.returncode == 0, bounded_scan_allowed.stdout + bounded_scan_allowed.stderr
         assert bounded_scan_allowed.stdout == ""
+
+        hard_reclaim_transcript = heartbeat_dir / "hard-reclaim.jsonl"
+        hard_reclaim_transcript.write_text(
+            "".join(
+                json.dumps({"type": "assistant", "message": {"role": "assistant", "content": "x" * 4096}}) + "\n"
+                for _ in range(180)
+            ),
+            encoding="utf-8",
+        )
+        hard_reclaimed = run_guard(
+            "ok",
+            10,
+            heartbeat_dir / "hard-reclaim-state",
+            transcript_path=hard_reclaim_transcript,
+            total_budget=200_000,
+            warn_budget=20_000,
+            static_reserve=100,
+            downstream_reserve=1,
+            hard_reclaim_target_bytes=120_000,
+        )
+        assert hard_reclaimed.returncode == 0, hard_reclaimed.stdout + hard_reclaimed.stderr
+        payload = json.loads(hard_reclaimed.stdout)
+        assert payload["decision"] == "approve"
+        assert payload["hard_transcript_reclaim"]["changed"] is True
+        assert payload["hard_transcript_reclaim"]["target_bytes"] == 120_000
+        assert hard_reclaim_transcript.stat().st_size < payload["hard_transcript_reclaim"]["original_bytes"]
+        assert "vMem-reclaim-header" in hard_reclaim_transcript.read_text(encoding="utf-8")
+
+        default_target_transcript = heartbeat_dir / "default-target-hard-reclaim.jsonl"
+        default_target_transcript.write_text(
+            "".join(
+                json.dumps({"type": "assistant", "message": {"role": "assistant", "content": "z" * 4096}}) + "\n"
+                for _ in range(180)
+            ),
+            encoding="utf-8",
+        )
+        default_target_reclaimed = run_guard(
+            "ok",
+            10,
+            heartbeat_dir / "default-target-hard-reclaim-state",
+            transcript_path=default_target_transcript,
+            total_budget=200_000,
+            warn_budget=20_000,
+            static_reserve=100,
+            downstream_reserve=1,
+        )
+        assert default_target_reclaimed.returncode == 0, default_target_reclaimed.stdout + default_target_reclaimed.stderr
+        payload = json.loads(default_target_reclaimed.stdout)
+        assert payload["hard_transcript_reclaim"]["changed"] is True
+        assert payload["hard_transcript_reclaim"]["target_bytes"] <= 200_000
+        assert payload["detail"]["projected_context_chars"] <= payload["detail"]["total_context_hard_chars"]
 
     print("✅ prompt_budget_guard tests passed")
 
