@@ -1,13 +1,13 @@
 # vMem Production Benchmark Report
 
 **Verdict:** production-grade (100.0/100)
-**Run:** 2026-07-04T03:59:37.490062+00:00
+**Run:** 2026-07-03T14:55:17.508958+00:00
 **Checks:** 7 passed / 0 failed
 
 ## Value At A Glance
 
-- **OS-style context reclaim:** warning watermark enters bounded working-set mode before hard overflow.
-- **API 400 prevention path:** high pressure sheds optional context and emits only a bounded working-set notice.
+- **OS-style context reclaim:** hard overflow enters bounded working-set mode instead of blocking the user.
+- **API 400 prevention path:** critical pressure sheds optional context and emits only a bounded working-set notice.
 - **Operational readiness:** doctor, install, repair, no-db degraded reports, and public hygiene are checked as release gates.
 
 ## Hard Gates
@@ -15,8 +15,8 @@
 - ✅ **Package metadata exposes vmem and legacy CLI** — pyproject package name and console scripts are correct
 - ✅ **Doctor passes on a fresh writable memory dir** — vmem doctor reports all checks healthy
 - ✅ **Install/repair are idempotent** — install writes the guard once and repair is a no-op
-- ✅ **Warning context overflow enters working-set mode** — warn watermark triggers bounded working-set reclaim before hard overflow
-- ✅ **High pressure sheds optional retrieval context** — fallback emits no additionalContext and daemon is wired before Stage 0
+- ✅ **Hard context overflow enters working-set mode** — hard overflow triggers bounded working-set reclaim without blocking
+- ✅ **Critical pressure sheds optional retrieval context** — fallback emits no additionalContext and daemon is wired before Stage 0
 - ✅ **No store.db degrades instead of crashing** — production assertions return shaped DEGRADED report without store.db
 - ✅ **Public files contain no internal strings** — public hygiene scan is clean
 
@@ -40,25 +40,25 @@
 ### ✅ Doctor passes on a fresh writable memory dir
 - **Category:** install
 - **Result:** vmem doctor reports all checks healthy
-- **Value:** `{"ok": true, "checks": [{"name": "required_files", "ok": true, "message": "required hook files present"}, {"name": "hooks", "ok": true, "message": "hook order ok: prompt_budget_guard before retriever"}, {"name": "retriever_pressure", "ok": true, "message": "retriever fallback and daemon consume pressure state"}, {"name": "memory_dir", "ok": true, "message": "memory dir writable: /tmp/claude-1000/claude-1000/tmp7j1yoz13/memory-os"}, {"name": "public_hygiene", "ok": true, "message": "no public int`
+- **Value:** `{"ok": true, "checks": [{"name": "required_files", "ok": true, "message": "required hook files present"}, {"name": "hooks", "ok": true, "message": "hook order ok: prompt_budget_guard before retriever"}, {"name": "retriever_pressure", "ok": true, "message": "retriever fallback and daemon consume pressure state"}, {"name": "memory_dir", "ok": true, "message": "memory dir writable: /tmp/claude-1000/claude-1000/tmpj5jixb9p/memory-os"}, {"name": "public_hygiene", "ok": true, "message": "no public int`
 - **Why it matters:** Users get a single command that proves the installation is sane.
 - **Fix if failing:** Run vmem repair, verify packaged hook files, and ensure MEMORY_OS_DIR is writable.
 
 ### ✅ Install/repair are idempotent
 - **Category:** install
 - **Result:** install writes the guard once and repair is a no-op
-- **Value:** `{"install": {"ok": true, "changed": true, "settings_path": "/tmp/claude-1000/claude-1000/tmp7j1yoz13/settings.json", "guard_index": 0, "duplicates_removed": 0, "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/prompt_budget_guard.py\"", "action": "install"}, "repair": {"ok": true, "changed": false, "settings_path": "/tmp/claude-1000/claude-1000/tmp7j1yoz13/settings.json", "guard_index": 0, "duplicates_removed": 0, "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/prompt_budget_guard.py\"", "acti`
+- **Value:** `{"install": {"ok": true, "changed": true, "settings_path": "/tmp/claude-1000/claude-1000/tmpj5jixb9p/settings.json", "guard_index": 0, "duplicates_removed": 0, "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/prompt_budget_guard.py\"", "action": "install"}, "repair": {"ok": true, "changed": false, "settings_path": "/tmp/claude-1000/claude-1000/tmpj5jixb9p/settings.json", "guard_index": 0, "duplicates_removed": 0, "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/prompt_budget_guard.py\"", "acti`
 - **Why it matters:** Users can safely re-run repair without duplicating hooks.
 - **Fix if failing:** Normalize UserPromptSubmit hooks so prompt_budget_guard is first and unique.
 
-### ✅ Warning context overflow enters working-set mode
+### ✅ Hard context overflow enters working-set mode
 - **Category:** context_safety
-- **Result:** warn watermark triggers bounded working-set reclaim before hard overflow
-- **Value:** `{"decision": "approve", "pressure": "high", "mode": "working_set", "working_set_exists": true, "notice_chars": 239}`
-- **Why it matters:** vMem starts OS-style working-set reclaim at the warning watermark, before requests reach the API context-window failure point.
-- **Fix if failing:** Make prompt_budget_guard write working_set state, shed optional context, and emit only bounded recovery context under warning pressure.
+- **Result:** hard overflow triggers bounded working-set reclaim without blocking
+- **Value:** `{"decision": "approve", "pressure": "critical", "mode": "working_set", "working_set_exists": true, "notice_chars": 239}`
+- **Why it matters:** vMem manages context pressure with OS-style working-set reclaim instead of stopping the user or sending an overlarge request blindly.
+- **Fix if failing:** Make prompt_budget_guard write working_set state, shed optional context, and emit only bounded recovery context under hard pressure.
 
-### ✅ High pressure sheds optional retrieval context
+### ✅ Critical pressure sheds optional retrieval context
 - **Category:** context_safety
 - **Result:** fallback emits no additionalContext and daemon is wired before Stage 0
 - **Value:** `{"fallback_stdout_bytes": 0, "daemon_wired_before_stage0": true}`
