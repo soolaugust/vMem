@@ -21,6 +21,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 REPORT_DIR = Path(__file__).resolve().parent / "reports"
 THRESHOLDS = json.loads((Path(__file__).resolve().parent / "thresholds.json").read_text(encoding="utf-8"))
 INTERNAL_PATTERNS = ("xiao" + "mi", "git.n." + "xiao" + "mi", "@" + "xiao" + "mi", "kernel-cpu/" + "aios")
@@ -273,22 +275,6 @@ def _check_public_hygiene(ctx: BenchContext) -> Check:
     )
 
 
-CHECKS: list[Callable[[BenchContext], Check]] = [
-    timed("package_metadata_ok", "Package metadata exposes vmem and legacy CLI", "install", _check_package_metadata),
-    timed("doctor_passes", "Doctor passes on a fresh writable memory dir", "install", _check_doctor),
-    timed("install_repair_idempotent", "Install/repair are idempotent", "install", _check_install_repair),
-    timed("context_warn_overflow_enters_working_set", "Warning context overflow enters working-set mode", "context_safety", _check_warn_overflow),
-    timed("high_pressure_sheds_retriever", "High pressure sheds optional retrieval context", "context_safety", _check_retriever_shed),
-    timed("fault_no_db_degrades", "No store.db degrades instead of crashing", "fault", _check_no_db),
-    timed("public_hygiene_passes", "Public files contain no internal strings", "hygiene", _check_public_hygiene),
-]
-SUITES = {
-    "smoke": CHECKS,
-    "release": CHECKS,
-    "all": CHECKS,
-}
-
-
 def _check_transcript_reclaim(ctx: BenchContext) -> Check:
     from hooks.transcript_reclaimer import reclaim_transcript
     transcript = ctx.temp / "oversized-agent-session.jsonl"
@@ -321,6 +307,23 @@ def _check_transcript_reclaim(ctx: BenchContext) -> Check:
         fix="Run hooks/transcript_reclaimer.py or enable hard reclaim from the pressure guard before Agent activity inherits a huge transcript.",
         gate=True,
     )
+
+
+CHECKS: list[Callable[[BenchContext], Check]] = [
+    timed("package_metadata_ok", "Package metadata exposes vmem and legacy CLI", "install", _check_package_metadata),
+    timed("doctor_passes", "Doctor passes on a fresh writable memory dir", "install", _check_doctor),
+    timed("install_repair_idempotent", "Install/repair are idempotent", "install", _check_install_repair),
+    timed("context_warn_overflow_enters_working_set", "Warning context overflow enters working-set mode", "context_safety", _check_warn_overflow),
+    timed("high_pressure_sheds_retriever", "High pressure sheds optional retrieval context", "context_safety", _check_retriever_shed),
+    timed("transcript_hard_reclaim_bounds_active_context", "Transcript hard reclaim bounds active context", "context_safety", _check_transcript_reclaim),
+    timed("fault_no_db_degrades", "No store.db degrades instead of crashing", "fault", _check_no_db),
+    timed("public_hygiene_passes", "Public files contain no internal strings", "hygiene", _check_public_hygiene),
+]
+SUITES = {
+    "smoke": CHECKS,
+    "release": CHECKS,
+    "all": CHECKS,
+}
 
 
 def score(checks: list[Check]) -> dict[str, Any]:

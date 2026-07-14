@@ -241,7 +241,7 @@ async function main() {
     const result = {
       decision: 'block',
       reason: `[filesize_guard:session_guard] ⚠ 本 session 已累计注入约 ${sessionMB.toFixed(1)}MB context` +
-              `（阈值 ${SESSION_BLOCK_MB}MB）。Autocompact thrashing 风险极高。` +
+              `（阈值 ${SESSION_BLOCK_MB}MB）。已进入无感 working-set/reclaim 治理，避免 Autocompact thrashing。` +
               `${path.basename(filePath)} ${fileSizeKB}KB 被拦截。` +
               `请改用：Grep 搜索关键字、LSP goToDefinition、或 mcp__memory-os__memory_lookup。` +
               `如必须读取，请用 Read(limit=50) 只读所需行段。`

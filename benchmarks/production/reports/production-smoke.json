@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-07-04T03:59:37.490062+00:00",
+  "timestamp": "2026-07-03T14:55:17.508958+00:00",
   "suite": "smoke",
   "verdict": {
     "score": 100.0,
@@ -60,7 +60,7 @@
           {
             "name": "memory_dir",
             "ok": true,
-            "message": "memory dir writable: /tmp/claude-1000/claude-1000/tmp7j1yoz13/memory-os"
+            "message": "memory dir writable: /tmp/claude-1000/claude-1000/tmpj5jixb9p/memory-os"
           },
           {
             "name": "public_hygiene",
@@ -70,7 +70,7 @@
         ]
       },
       "threshold": "ok=true",
-      "duration_ms": 618.33,
+      "duration_ms": 502.02,
       "impact": "Users get a single command that proves the installation is sane.",
       "fix": "Run vmem repair, verify packaged hook files, and ensure MEMORY_OS_DIR is writable.",
       "gate": true
@@ -85,7 +85,7 @@
         "install": {
           "ok": true,
           "changed": true,
-          "settings_path": "/tmp/claude-1000/claude-1000/tmp7j1yoz13/settings.json",
+          "settings_path": "/tmp/claude-1000/claude-1000/tmpj5jixb9p/settings.json",
           "guard_index": 0,
           "duplicates_removed": 0,
           "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/prompt_budget_guard.py\"",
@@ -94,7 +94,7 @@
         "repair": {
           "ok": true,
           "changed": false,
-          "settings_path": "/tmp/claude-1000/claude-1000/tmp7j1yoz13/settings.json",
+          "settings_path": "/tmp/claude-1000/claude-1000/tmpj5jixb9p/settings.json",
           "guard_index": 0,
           "duplicates_removed": 0,
           "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/prompt_budget_guard.py\"",
@@ -108,33 +108,33 @@
         }
       },
       "threshold": "install changed=true, repair changed=false",
-      "duration_ms": 1000.39,
+      "duration_ms": 977.58,
       "impact": "Users can safely re-run repair without duplicating hooks.",
       "fix": "Normalize UserPromptSubmit hooks so prompt_budget_guard is first and unique.",
       "gate": true
     },
     {
-      "name": "context_warn_overflow_enters_working_set",
-      "title": "Warning context overflow enters working-set mode",
+      "name": "context_hard_overflow_enters_working_set",
+      "title": "Hard context overflow enters working-set mode",
       "category": "context_safety",
       "ok": true,
-      "message": "warn watermark triggers bounded working-set reclaim before hard overflow",
+      "message": "hard overflow triggers bounded working-set reclaim without blocking",
       "value": {
         "decision": "approve",
-        "pressure": "high",
+        "pressure": "critical",
         "mode": "working_set",
         "working_set_exists": true,
         "notice_chars": 239
       },
-      "threshold": "decision=approve, pressure=high, mode=working_set, notice<=1200",
-      "duration_ms": 226.84,
-      "impact": "vMem starts OS-style working-set reclaim at the warning watermark, before requests reach the API context-window failure point.",
-      "fix": "Make prompt_budget_guard write working_set state, shed optional context, and emit only bounded recovery context under warning pressure.",
+      "threshold": "decision=approve, pressure=critical, mode=working_set, notice<=1200",
+      "duration_ms": 54.14,
+      "impact": "vMem manages context pressure with OS-style working-set reclaim instead of stopping the user or sending an overlarge request blindly.",
+      "fix": "Make prompt_budget_guard write working_set state, shed optional context, and emit only bounded recovery context under hard pressure.",
       "gate": true
     },
     {
-      "name": "high_pressure_sheds_retriever",
-      "title": "High pressure sheds optional retrieval context",
+      "name": "critical_pressure_sheds_retriever",
+      "title": "Critical pressure sheds optional retrieval context",
       "category": "context_safety",
       "ok": true,
       "message": "fallback emits no additionalContext and daemon is wired before Stage 0",
@@ -143,7 +143,7 @@
         "daemon_wired_before_stage0": true
       },
       "threshold": "fallback_stdout_bytes=0, daemon_wired_before_stage0=true",
-      "duration_ms": 435.88,
+      "duration_ms": 183.69,
       "impact": "This is the local proof that vMem prevents extra context from pushing requests toward API 400.",
       "fix": "Ensure retriever.py and retriever_daemon.py call should_shed_optional_context before retrieval/injection.",
       "gate": true
@@ -159,7 +159,7 @@
         "status": "DEGRADED"
       },
       "threshold": "returncode=1, status=DEGRADED, report shape complete",
-      "duration_ms": 31.05,
+      "duration_ms": 29.6,
       "impact": "Fresh installs and broken stores produce actionable diagnostics rather than stack traces.",
       "fix": "Return a normal report shape for no-db and keep text/json modes tolerant.",
       "gate": true
@@ -174,7 +174,7 @@
         "hits": []
       },
       "threshold": "0 hits",
-      "duration_ms": 3.02,
+      "duration_ms": 3.24,
       "impact": "Public releases do not leak internal organization references.",
       "fix": "Remove internal strings from public docs/configs or construct scanner patterns dynamically.",
       "gate": true
