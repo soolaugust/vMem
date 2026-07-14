@@ -343,6 +343,88 @@ def main() -> None:
         pressure_state = json.loads((heartbeat_dir / "memory-os" / "context_pressure_state.json").read_text(encoding="utf-8"))
         assert pressure_state["last_pressure_level"] == "high"
 
+        output_state_dir = heartbeat_dir / "output-state"
+        output_memory_dir = output_state_dir / "memory-os"
+        output_memory_dir.mkdir(parents=True)
+        output_memory_state = output_memory_dir / "output_working_set_state.json"
+        output_memory_state.write_text(
+            json.dumps({
+                "evidence_path": "/tmp/output-page.txt",
+                "manifest_path": "/tmp/output-page.json",
+                "pages": 3,
+                "chars": 130000,
+                "incomplete": True,
+            }),
+            encoding="utf-8",
+        )
+        output_notice_warned = run_guard(
+            "ok",
+            10,
+            output_state_dir,
+            total_budget=1000,
+            warn_budget=100,
+            static_reserve=80,
+            downstream_reserve=30,
+        )
+        assert output_notice_warned.returncode == 0, output_notice_warned.stdout + output_notice_warned.stderr
+        payload = json.loads(output_notice_warned.stdout)
+        additional = payload["hookSpecificOutput"]["additionalContext"]
+        assert "output_working_set" in additional
+        assert "CLAUDE_CODE_MAX_OUTPUT_TOKENS" in additional
+        assert "不要把调大 CLAUDE_CODE_MAX_OUTPUT_TOKENS 当默认" in additional
+        assert "设置 CLAUDE_CODE_MAX_OUTPUT_TOKENS" not in additional
+        assert "提高 CLAUDE_CODE_MAX_OUTPUT_TOKENS" not in additional
+
+        output_normal_notice_dir = heartbeat_dir / "output-normal-notice"
+        output_normal_memory_dir = output_normal_notice_dir / "memory-os"
+        output_normal_memory_dir.mkdir(parents=True)
+        (output_normal_memory_dir / "output_working_set_state.json").write_text(
+            json.dumps({
+                "evidence_path": "/tmp/output-page.txt",
+                "manifest_path": "/tmp/output-page.json",
+                "pages": 2,
+                "chars": 90000,
+                "incomplete": False,
+            }),
+            encoding="utf-8",
+        )
+        output_normal_notice = run_guard(
+            "ok",
+            10,
+            output_normal_notice_dir,
+            total_budget=50_000,
+            static_reserve=80,
+            downstream_reserve=30,
+        )
+        assert output_normal_notice.returncode == 0, output_normal_notice.stdout + output_normal_notice.stderr
+        payload = json.loads(output_normal_notice.stdout)
+        assert payload["decision"] == "approve"
+        assert "output_working_set" in payload["hookSpecificOutput"]["additionalContext"]
+
+        reported_400_transcript = heartbeat_dir / "reported-400.jsonl"
+        reported_400_transcript.write_text(
+            "".join(
+                json.dumps({"type": "assistant", "message": {"role": "assistant", "content": "r" * 4096}}) + "\n"
+                for _ in range(120)
+            ),
+            encoding="utf-8",
+        )
+        reported_400 = run_guard(
+            "API Error: 400 Your input exceeds the context window of this model. trace_id: reported-400-trace",
+            500,
+            heartbeat_dir / "reported-400-state",
+            transcript_path=reported_400_transcript,
+            total_budget=900_000,
+            warn_budget=800_000,
+            static_reserve=100,
+            downstream_reserve=1,
+        )
+        assert reported_400.returncode == 0, reported_400.stdout + reported_400.stderr
+        payload = json.loads(reported_400.stdout)
+        assert payload["decision"] == "approve"
+        assert payload["hard_transcript_reclaim"]["changed"] is True
+        assert "reported-400-trace" in (heartbeat_dir / "reported-400-state" / "memory-os" / "context_oom_events.jsonl").read_text(encoding="utf-8")
+
         raw_transcript = heartbeat_dir / "raw-transcript.jsonl"
         raw_transcript.write_text("not-json\n" + ("z" * 300), encoding="utf-8")
         raw_warned = run_guard(

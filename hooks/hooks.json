@@ -143,7 +143,17 @@
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/extractor.py\"",
             "timeout": 10,
-            "async": true
+            "async": false
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/output_governor.py\"",
+            "timeout": 10,
+            "async": false
           }
         ]
       },

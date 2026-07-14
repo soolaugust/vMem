@@ -21,7 +21,7 @@ jobs:
           python -m json.tool hooks/hooks.json >/dev/null
           python -m py_compile \
             memory_os/cli/mcp_memory_lookup.py memory_os/cli/vmem_doctor.py memory_os/observability/production_assertions.py \
-            hooks/context_governor.py hooks/prompt_budget_guard.py hooks/transcript_reclaimer.py \
+            hooks/context_governor.py hooks/prompt_budget_guard.py hooks/transcript_reclaimer.py hooks/output_governor.py \
             hooks/retriever.py hooks/retriever_daemon.py
       - name: Unit and e2e tests
         run: |
@@ -29,9 +29,11 @@ jobs:
             tests/test_vmem_doctor.py \
             tests/test_context_400_e2e.py \
             tests/test_transcript_reclaimer.py \
+            tests/test_output_governor.py \
+            tests/test_posttool_guard_thrashing.py \
             tests/test_production_benchmark.py \
-            hooks/test_context_governor.py \
-            hooks/test_prompt_budget_guard.py -q
+            tests/hooks/test_context_governor.py \
+            tests/hooks/test_prompt_budget_guard.py -q
       - name: Production benchmark smoke
         run: |
           python benchmarks/production/runner.py --suite smoke --fail-under 85 --report /tmp/vmem-benchmark.json --markdown /tmp/vmem-benchmark.md

@@ -86,6 +86,8 @@ HARD_TRANSCRIPT_RECLAIM_TARGET_BYTES = int(os.environ.get("MEMORY_OS_HARD_TRANSC
 HARD_TRANSCRIPT_RECLAIM_MIN_TARGET_BYTES = int(os.environ.get("MEMORY_OS_HARD_TRANSCRIPT_RECLAIM_MIN_TARGET_BYTES", "65536"))
 HARD_TRANSCRIPT_RECLAIM_KEEP_TAIL_LINES = int(os.environ.get("MEMORY_OS_HARD_TRANSCRIPT_RECLAIM_KEEP_TAIL_LINES", "400"))
 HARD_TRANSCRIPT_RECLAIM_MAX_LINE_BYTES = int(os.environ.get("MEMORY_OS_HARD_TRANSCRIPT_RECLAIM_MAX_LINE_BYTES", "32768"))
+OUTPUT_WORKING_SET_STATE_FILE = MEMORY_OS_DIR / "output_working_set_state.json"
+OUTPUT_WORKING_SET_NOTICE_MAX_CHARS = int(os.environ.get("MEMORY_OS_OUTPUT_NOTICE_MAX_CHARS", "900"))
 BIG_PAYLOAD_KEYS = frozenset({
     "old_string", "new_string", "oldString", "newString", "content", "command",
     "stdout", "stderr", "text", "file_content",
@@ -596,6 +598,41 @@ def _hard_reclaim_target_bytes(detail: BudgetDetail) -> int:
     return max(HARD_TRANSCRIPT_RECLAIM_MIN_TARGET_BYTES, min(DEFAULT_TOTAL_HARD_CHAR_BUDGET, available - 1024))
 
 
+def _reported_context_window_400(prompt: str) -> bool:
+    lowered = prompt.lower()
+    if "trace_id:" not in lowered and "api error: 400" not in lowered:
+        return False
+    return (
+        "input exceeds the context window" in lowered
+        or "context window" in lowered
+        or "context/window" in lowered
+        or "exceeds the context" in lowered
+    )
+
+
+def _output_working_set_notice() -> str:
+    try:
+        if not OUTPUT_WORKING_SET_STATE_FILE.exists():
+            return ""
+        state = json.loads(OUTPUT_WORKING_SET_STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    if not isinstance(state, dict):
+        return ""
+    evidence = state.get("evidence_path", "")
+    manifest = state.get("manifest_path", "")
+    pages = state.get("pages", 0)
+    chars = state.get("chars", 0)
+    incomplete = state.get("incomplete", False)
+    notice = (
+        "[output_working_set] 上一条 assistant 输出已按 OS working-set 策略分页/压缩，"
+        f"chars={chars}, pages={pages}, incomplete={bool(incomplete)}. "
+        "需要全文时按 evidence/page refs 读取或请求展开具体页；不要把调大 CLAUDE_CODE_MAX_OUTPUT_TOKENS 当默认解法。 "
+        f"evidence={evidence} manifest={manifest}"
+    )
+    return notice[:OUTPUT_WORKING_SET_NOTICE_MAX_CHARS]
+
+
 def _hard_reclaim_transcript(transcript: Path, detail: BudgetDetail, reason: str) -> dict[str, Any]:
     if hard_reclaim_transcript is None:
         return {"ok": False, "changed": False, "reason": "hard transcript reclaimer unavailable"}
@@ -631,15 +668,21 @@ def main() -> None:
     transcript = _transcript_path(data)
     reclaim_result: dict[str, Any] | None = None
     hard_reclaim_result: dict[str, Any] | None = None
-    if transcript and detail["projected_context_chars"] > detail["total_context_warn_chars"]:
+    reported_400 = _reported_context_window_400(prompt)
+    if transcript and (reported_400 or detail["projected_context_chars"] > detail["total_context_warn_chars"]):
         reclaim_result = reclaim_transcript_context(transcript)
         if int(reclaim_result.get("saved_bytes", 0) or 0) > 0:
             detail = _budget_detail(data, prompt)
-    if transcript and detail["projected_context_chars"] > detail["total_context_hard_chars"]:
-        hard_reclaim_result = _hard_reclaim_transcript(transcript, detail, "prompt hard context pressure")
+    if transcript and (reported_400 or detail["projected_context_chars"] > detail["total_context_hard_chars"]):
+        hard_reclaim_result = _hard_reclaim_transcript(
+            transcript,
+            detail,
+            "user reported context window 400" if reported_400 else "prompt hard context pressure",
+        )
         if hard_reclaim_result.get("changed"):
             detail = _budget_detail(data, prompt)
     manifest_notice = ""
+    output_notice = _output_working_set_notice()
     if transcript and build_working_set_manifest is not None and manifest_context is not None:
         try:
             if extract_transcript_pages is not None and detail["projected_context_chars"] > detail["total_context_warn_chars"]:
@@ -679,6 +722,37 @@ def main() -> None:
         sys.stdout.write(json.dumps({"decision": "approve", "reason": reason, "detail": detail}, ensure_ascii=False))
         sys.exit(0)
 
+    if reported_400 and hard_reclaim_result and not detail["projected_context_chars"] > detail["total_context_hard_chars"]:
+        pressure_reason = "user reported input context window 400; proactive hard transcript reclaim applied"
+        write_pressure_state("high", pressure_reason)
+        if trace_id:
+            record_context_oom(trace_id, reason=pressure_reason, snapshot=snapshot)
+        write_context_mode("working_set", pressure_reason)
+        working_set = write_working_set(prompt, _transcript_path(data))
+        notice = format_working_set_notice(working_set)
+        if manifest_notice:
+            notice = (notice + "\n" + manifest_notice)[:6000]
+        if output_notice:
+            notice = (notice + "\n" + output_notice)[:6000]
+        output = {
+            "decision": "approve",
+            "reason": "[prompt_budget_guard] 用户报告 input context window 400；已在下一次请求前主动 hard reclaim transcript，不建议通过扩大上限处理。",
+            "detail": detail,
+            "transcript_reclaim": reclaim_result or {},
+            "hard_transcript_reclaim": hard_reclaim_result or {},
+        }
+        governed = enforce_additional_context(
+            data,
+            notice,
+            producer="prompt_budget_guard",
+            hook_event_name="UserPromptSubmit",
+            mandatory=True,
+        )
+        if governed:
+            output.update(governed)
+        sys.stdout.write(json.dumps(output, ensure_ascii=False))
+        sys.exit(0)
+
     if detail["projected_context_chars"] > detail["total_context_hard_chars"]:
         pressure_reason = (
             "projected context "
@@ -694,6 +768,8 @@ def main() -> None:
         notice = format_emergency_notice(dict(detail)) if emergency else format_working_set_notice(working_set)
         if manifest_notice:
             notice = (notice + "\n" + manifest_notice)[:6000]
+        if output_notice:
+            notice = (notice + "\n" + output_notice)[:6000]
         reason = (
             "[prompt_budget_guard] CRITICAL: projected request context "
             f"chars={detail['projected_context_chars']} exceeds hard budget={detail['total_context_hard_chars']} "
@@ -739,6 +815,8 @@ def main() -> None:
         notice = format_working_set_notice(working_set)
         if manifest_notice:
             notice = (notice + "\n" + manifest_notice)[:6000]
+        if output_notice:
+            notice = (notice + "\n" + output_notice)[:6000]
         reason = (
             "[prompt_budget_guard] WARN: projected request context "
             f"chars={detail['projected_context_chars']} exceeds warning budget={detail['total_context_warn_chars']} "
@@ -780,6 +858,18 @@ def main() -> None:
         f"prompt={detail['prompt_chars']} projected={detail['projected_context_chars']} "
         f"warn={detail['total_context_warn_chars']} hard={detail['total_context_hard_chars']}",
     )
+    if output_notice:
+        output = {"decision": "approve", "reason": "output working-set notice", "detail": detail}
+        governed = enforce_additional_context(
+            data,
+            output_notice,
+            producer="output_working_set",
+            hook_event_name="UserPromptSubmit",
+            mandatory=True,
+        )
+        if governed:
+            output.update(governed)
+        sys.stdout.write(json.dumps(output, ensure_ascii=False))
     sys.exit(0)
 
 

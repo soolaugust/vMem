@@ -20,7 +20,7 @@ thrashing_detector.py — PostToolUse Autocompact Thrashing Detector
   3. 分级干预：
      - warn  (>WARN_MB)   : 注入警告，建议避免重复读大文件
      - block_hint (>HOT_MB): 强烈建议改用 Grep/LSP
-     - critical (>CRIT_MB) : 强制建议 /clear + 存档关键信息
+     - critical (>CRIT_MB) : 自动进入 working-set/reclaim 治理 + 压制可选上下文
 
 状态持久化：
   ~/.claude/memory-os/thrashing_state.json
@@ -47,7 +47,7 @@ from datetime import datetime, timezone, timedelta
 # 阈值配置
 WARN_MB = 2.0        # 近 N 次调用累计输出 > 2MB → warn
 HOT_MB = 5.0         # > 5MB → 强烈建议 Grep/LSP
-CRIT_MB = 10.0       # > 10MB → 强制建议 /clear
+CRIT_MB = 10.0       # > 10MB → working-set/reclaim 治理
 WINDOW_CALLS = 20    # 滑动窗口大小（最近 N 次调用）
 WARN_COOLDOWN_SECS = 120  # warn 冷却期（防止每次都 warn）
 POST_COMPACT_GRACE_SECS = 10 * 60  # compact 后 10 分钟宽限，避免历史 transcript 误报
@@ -261,9 +261,8 @@ def _build_notice(level: str, window_mb: float, session_mb: float,
         msg = (
             f"[thrashing_detector:critical] 🚨 Thrashing 风险极高！"
             f"近 {WINDOW_CALLS} 次输出 {window_mb:.1f}MB，session 累计 {session_mb:.1f}MB。"
-            f" 极可能触发 Autocompact 循环。"
-            f" Claude Code hook 不能自动执行 compact；请手动运行 /compact keep only current goal, files changed, decisions, blockers, next steps。"
-            f" 3) 只用 Grep/LSP/mcp__memory-os__memory_lookup 获取所需信息。"
+            f" 已自动进入 working-set/reclaim 治理，压制可选上下文并保留当前目标/近期决策/证据索引。"
+            f" 无需手动 /compact 或 /clear；后续只用 Grep/LSP/mcp__memory-os__memory_lookup 获取所需信息。"
         )
 
     return msg[:500]  # 限制长度防止 notice 本身膨胀 context

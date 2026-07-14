@@ -35,9 +35,11 @@ sys.path.insert(0, str(_ROOT))
 if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
 try:
-    from context_governor import enforce_additional_context
+    from context_governor import enforce_additional_context, write_context_mode, write_pressure_state
 except Exception:
     enforce_additional_context = None
+    write_context_mode = None
+    write_pressure_state = None
 
 MEMORY_OS_DIR = Path.home() / ".claude" / "memory-os"
 PROFILE_DB = MEMORY_OS_DIR / "tool_profile.db"
@@ -59,6 +61,8 @@ CRIT_MB = 10.0
 LARGE_FILE_CRIT_KB = 500
 WINDOW_CALLS = 20
 WARN_COOLDOWN_SECS = 120
+POST_COMPACT_GRACE_SECS = 10 * 60
+POST_COMPACT_GRACE_BYTES = 5 * 1024 * 1024
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -132,15 +136,79 @@ def _load_state() -> dict:
             return json.loads(STATE_FILE.read_text())
     except Exception:
         pass
-    return {"session_bytes": 0, "last_warn_ts": 0, "compact_count": 0,
-            "window_bytes_history": []}
+    return {
+        "schema_version": 2,
+        "session_id": "",
+        "epoch_id": 0,
+        "last_compact_ts": 0,
+        "post_compact_grace_until_ts": 0,
+        "post_compact_grace_bytes": POST_COMPACT_GRACE_BYTES,
+        "session_bytes": 0,
+        "epoch_bytes": 0,
+        "lifetime_session_bytes": 0,
+        "last_warn_ts": 0,
+        "compact_count": 0,
+        "window_bytes_history": [],
+    }
 
 
 def _save_state(state: dict):
     try:
+        MEMORY_OS_DIR.mkdir(parents=True, exist_ok=True)
         STATE_FILE.write_text(json.dumps(state, ensure_ascii=False))
     except Exception:
         pass
+
+
+def _ensure_session_epoch(state: dict, session_id: str) -> dict:
+    if session_id and state.get("session_id") not in ("", session_id):
+        compact_count = int(state.get("compact_count", 0) or 0)
+        state.clear()
+        state.update({
+            "schema_version": 2,
+            "session_id": session_id,
+            "epoch_id": 0,
+            "last_compact_ts": 0,
+            "post_compact_grace_until_ts": 0,
+            "post_compact_grace_bytes": POST_COMPACT_GRACE_BYTES,
+            "session_bytes": 0,
+            "epoch_bytes": 0,
+            "lifetime_session_bytes": 0,
+            "last_warn_ts": 0,
+            "compact_count": compact_count,
+            "window_bytes_history": [],
+        })
+    elif session_id and not state.get("session_id"):
+        state["session_id"] = session_id
+    state.setdefault("schema_version", 2)
+    state.setdefault("epoch_id", 0)
+    state.setdefault("post_compact_grace_until_ts", 0)
+    state.setdefault("post_compact_grace_bytes", POST_COMPACT_GRACE_BYTES)
+    state.setdefault("epoch_bytes", state.get("session_bytes", 0))
+    state.setdefault("lifetime_session_bytes", 0)
+    state.setdefault("window_bytes_history", [])
+    return state
+
+
+def _in_post_compact_grace(state: dict, now_ts: float) -> bool:
+    if now_ts >= float(state.get("post_compact_grace_until_ts", 0) or 0):
+        return False
+    epoch_bytes = int(state.get("epoch_bytes", state.get("session_bytes", 0)) or 0)
+    grace_bytes = int(state.get("post_compact_grace_bytes", POST_COMPACT_GRACE_BYTES) or 0)
+    return epoch_bytes < grace_bytes
+
+
+def _enter_pressure(level: str, reason: str) -> None:
+    if write_pressure_state is not None:
+        try:
+            write_pressure_state(level, reason)
+        except Exception:
+            pass
+    if level == "critical" and write_context_mode is not None:
+        try:
+            write_context_mode("working_set", reason)
+        except Exception:
+            pass
 
 
 def _get_file_size(tool_input: dict, tool_name: str) -> int:
@@ -159,9 +227,9 @@ def _build_thrashing_notice(level: str, window_mb: float, session_mb: float,
                              top_tools: list, file_size_kb: float, file_name: str) -> str:
     if level == "critical":
         base = (
-            f"[thrashing_detector:critical] ⚠⚠ context 极度膨胀！"
-            f"近 {WINDOW_CALLS} 次输出 {window_mb:.1f}MB，session 累计 {session_mb:.1f}MB。"
-            f" 强烈建议立即 /clear，memory-os 已记录关键知识。"
+            f"[thrashing_detector:critical] ⚠⚠ context 极度膨胀：近 {WINDOW_CALLS} 次输出 {window_mb:.1f}MB，"
+            f"session epoch 累计 {session_mb:.1f}MB。已自动进入 working-set/reclaim 治理，"
+            "将压制可选上下文并优先保留当前目标/近期决策/证据索引；无需手动 /compact 或 /clear。"
         )
     elif level == "hot":
         top_str = ""
@@ -197,8 +265,11 @@ def _run_thrashing(tool_name: str, tool_input: dict, effective_bytes: int,
                    session_id: str, file_size: int, file_name: str,
                    state: dict, now_ts: float) -> str | None:
     """执行 thrashing 检测，返回告警文本或 None。"""
-    # 更新 session 累计
+    state = _ensure_session_epoch(state, session_id)
+    # 更新 session/epoch 累计
     state["session_bytes"] = state.get("session_bytes", 0) + effective_bytes
+    state["epoch_bytes"] = state.get("epoch_bytes", 0) + effective_bytes
+    state["lifetime_session_bytes"] = state.get("lifetime_session_bytes", 0) + effective_bytes
 
     # 更新滑动窗口历史
     history = state.get("window_bytes_history", [])
@@ -208,8 +279,11 @@ def _run_thrashing(tool_name: str, tool_input: dict, effective_bytes: int,
 
     window_bytes = sum(h[1] for h in history[-WINDOW_CALLS:])
     window_mb = window_bytes / 1024 / 1024
-    session_mb = state["session_bytes"] / 1024 / 1024
+    session_mb = state["epoch_bytes"] / 1024 / 1024
     file_size_kb = file_size / 1024
+
+    if _in_post_compact_grace(state, now_ts):
+        return None
 
     since_last_warn = now_ts - state.get("last_warn_ts", 0)
     in_cooldown = since_last_warn < WARN_COOLDOWN_SECS
@@ -246,6 +320,9 @@ def _run_thrashing(tool_name: str, tool_input: dict, effective_bytes: int,
             conn.close()
 
     state["last_warn_ts"] = now_ts
+    reason = f"thrashing {level}: window={window_mb:.1f}MB epoch={session_mb:.1f}MB tool={tool_name}"
+    if level in {"hot", "critical"}:
+        _enter_pressure("critical" if level == "critical" else "high", reason)
     return _build_thrashing_notice(level, window_mb, session_mb, top_tools, file_size_kb, file_name)
 
 
@@ -271,7 +348,8 @@ def main():
     notices = []
 
     # ── Phase 1: zram 压缩（仅 Bash/Read）──────────────────────────────────
-    output_text = _extract_output_text(tool_response) if tool_name in ("Bash", "Read") else ""
+    # Thrashing accounting must still see every tool's output.
+    output_text = _extract_output_text(tool_response)
     zram_notice = None
     if tool_name == "Bash":
         cmd = tool_input.get("command", "") if isinstance(tool_input, dict) else str(tool_input)
@@ -314,7 +392,7 @@ def main():
                 combined,
                 producer="posttool_guard",
                 hook_event_name="PostToolUse",
-                mandatory=False,
+                mandatory="[thrashing_detector:critical]" in combined,
                 max_chars=600,
             )
         if output is None:
