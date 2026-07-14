@@ -33,7 +33,8 @@ jobs:
             tests/test_posttool_guard_thrashing.py \
             tests/test_production_benchmark.py \
             tests/hooks/test_context_governor.py \
-            tests/hooks/test_prompt_budget_guard.py -q
+            tests/hooks/test_prompt_budget_guard.py \
+            tests/hooks/test_transcript_reclaim.py -q
       - name: Production benchmark smoke
         run: |
           python benchmarks/production/runner.py --suite smoke --fail-under 85 --report /tmp/vmem-benchmark.json --markdown /tmp/vmem-benchmark.md
